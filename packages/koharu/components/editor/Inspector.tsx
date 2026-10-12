@@ -499,6 +499,7 @@ function LayersInspector() {
     selected.length === 1 ? (selected[0] ?? null) : null,
   )
   const [movingLayer, setMovingLayer] = useState<EntityId | null>(null)
+  const [dragged, setDragged] = useState<EntityId | null>(null)
   const anchor = useRef<EntityId | null>(null)
 
   useEffect(() => {
@@ -509,25 +510,29 @@ function LayersInspector() {
 
   if (!page) return <EmptyInspector>{t('inspector.selectPage')}</EmptyInspector>
 
-  const move = (layer: Layer, displayDelta: number) => {
-    if (movingLayer !== null || isLockedLayer(layer)) return
+  // Unlocked siblings in stored order, and in the order the panel shows them.
+  const siblingsOf = (layer: Layer) => {
     const parent = layer.parent ?? page.id
-    const storedSiblings = page.layers.filter(
+    const stored = page.layers.filter(
       (candidate) => !isLockedLayer(candidate) && (candidate.parent ?? page.id) === parent,
     )
-    const parentLayer = page.layers.find((candidate) => candidate.id === parent)
-    const shownSiblings =
+    const parentLayer = page.layers.find((candidate) => candidate.id === layer.parent)
+    const shown =
       parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
-        ? storedSiblings
-        : [...storedSiblings].reverse()
-    const shownSource = shownSiblings.findIndex((candidate) => candidate.id === layer.id)
-    const shownTarget = shownSource + displayDelta
-    const targetLayer = shownSiblings[shownTarget]
-    if (shownSource < 0 || !targetLayer) return
-    const target = storedSiblings.findIndex((candidate) => candidate.id === targetLayer.id)
+        ? stored
+        : [...stored].reverse()
+    return { parent, stored, shown }
+  }
+
+  const moveTo = (layer: Layer, target: Layer) => {
+    if (movingLayer !== null || layer.id === target.id) return
+    if (isLockedLayer(layer) || isLockedLayer(target)) return
+    const { parent, stored } = siblingsOf(layer)
+    const index = stored.findIndex((candidate) => candidate.id === target.id)
+    if (index < 0) return
 
     setMovingLayer(layer.id)
-    void call(commands.moveLayer, layer.id, parent, target).then(
+    void call(commands.moveLayer, layer.id, parent, index).then(
       (next) => {
         queryClient.setQueryData(pageKey, next)
         setMovingLayer(null)
@@ -535,6 +540,12 @@ function LayersInspector() {
       },
       () => setMovingLayer(null),
     )
+  }
+
+  const move = (layer: Layer, displayDelta: number) => {
+    const { shown } = siblingsOf(layer)
+    const target = shown[shown.findIndex((candidate) => candidate.id === layer.id) + displayDelta]
+    if (target) moveTo(layer, target)
   }
 
   const deleteLayer = (layer: EntityId) =>
@@ -597,16 +608,7 @@ function LayersInspector() {
         <div className='py-0.5'>
           {layers.map(({ layer, index, depth }) => {
             const locked = isLockedLayer(layer)
-            const storedSiblings = page.layers.filter(
-              (candidate) =>
-                !isLockedLayer(candidate) &&
-                (candidate.parent ?? page.id) === (layer.parent ?? page.id),
-            )
-            const parentLayer = page.layers.find((candidate) => candidate.id === layer.parent)
-            const siblings =
-              parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
-                ? storedSiblings
-                : [...storedSiblings].reverse()
+            const { shown: siblings } = siblingsOf(layer)
             const position = siblings.findIndex((candidate) => candidate.id === layer.id)
             return (
               <LayerRow
@@ -629,6 +631,14 @@ function LayersInspector() {
                 canMoveUp={!locked && position > 0}
                 canMoveDown={!locked && position >= 0 && position < siblings.length - 1}
                 reordering={movingLayer !== null}
+                dragged={dragged === layer.id}
+                onDragStart={() => setDragged(layer.id)}
+                onDragEnd={() => setDragged(null)}
+                onDrop={() => {
+                  const source = page.layers.find((candidate) => candidate.id === dragged)
+                  if (source) moveTo(source, layer)
+                  setDragged(null)
+                }}
                 onDelete={isGroupLayer(layer) ? undefined : () => deleteLayer(layer.id)}
               />
             )
@@ -653,6 +663,10 @@ function LayerRow({
   canMoveUp,
   canMoveDown,
   reordering,
+  dragged,
+  onDragStart,
+  onDragEnd,
+  onDrop,
   onDelete,
 }: {
   layer: Layer
@@ -667,6 +681,10 @@ function LayerRow({
   canMoveUp: boolean
   canMoveDown: boolean
   reordering: boolean
+  dragged: boolean
+  onDragStart: () => void
+  onDragEnd: () => void
+  onDrop: () => void
   onDelete?: () => void
 }) {
   const { t } = useTranslation()
@@ -674,7 +692,18 @@ function LayerRow({
   const detail = localizedLayerKind(layer, t)
   const Icon = layerIcon(layer)
   return (
-    <div className='group min-w-0 px-1 py-px' style={{ paddingLeft: `${depth * 10 + 4}px` }}>
+    <div
+      draggable={!locked}
+      className={`group min-w-0 px-1 py-px ${dragged ? 'opacity-50' : ''}`}
+      style={{ paddingLeft: `${depth * 10 + 4}px` }}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault()
+        onDrop()
+      }}
+    >
       <div
         data-selected={selected}
         data-expanded={expanded}

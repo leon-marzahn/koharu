@@ -1056,6 +1056,34 @@ describe('greenfield editor', () => {
     expect(useKoharuStore.getState().selectedLayers).toEqual(['element'])
   })
 
+  it('reorders layers by dragging and ignores locked layers', async () => {
+    installLayerSelectionFixture()
+    const moveLayer = vi
+      .spyOn(commands, 'moveLayer')
+      .mockImplementation(async () => queryClient.getQueryData(pageKey) as never)
+    render(<Inspector />)
+    const row = (name: string) =>
+      screen.getByRole('button', { name: `Edit ${name}` }).closest('[draggable]')!
+    const locked = () =>
+      screen
+        .getAllByRole('button', { name: /^Edit / })
+        .find((button) => button.hasAttribute('disabled'))!
+        .closest('[draggable]')!
+
+    expect(row('Hello')).toHaveAttribute('draggable', 'true')
+    fireEvent.dragStart(row('Hello'))
+    fireEvent.drop(row('Third'))
+    await waitFor(() => expect(moveLayer).toHaveBeenCalledWith('element', 'page', 2))
+
+    moveLayer.mockClear()
+    expect(locked()).toHaveAttribute('draggable', 'false')
+    fireEvent.dragStart(row('Hello'))
+    fireEvent.drop(locked())
+    fireEvent.dragStart(locked())
+    fireEvent.drop(row('Third'))
+    expect(moveLayer).not.toHaveBeenCalled()
+  })
+
   it('resets a custom text frame to its automatic region', async () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({

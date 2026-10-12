@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Dragging a layer commits the new order and is undoable
-- [ ] ↑/↓ buttons still work
-- [ ] Locked layers cannot be dragged
-- [ ] Component tests cover drag reorder
+- [x] Dragging a layer commits the new order and is undoable
+- [x] ↑/↓ buttons still work
+- [x] Locked layers cannot be dragged
+- [x] Component tests cover drag reorder
