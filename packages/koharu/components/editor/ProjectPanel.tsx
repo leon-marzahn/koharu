@@ -41,6 +41,8 @@ const emptyProposals: Proposals = {
   term_updates: [],
   rejected_characters: [],
   rejected_terms: [],
+  rejected_character_entries: [],
+  rejected_term_entries: [],
   use_in_prompts: false,
 }
 
@@ -145,7 +147,13 @@ function CharactersTab() {
             onReject: () =>
               setPending(
                 pending.filter((_, i) => i !== index),
-                { rejected_characters: [...proposals.rejected_characters, character.source_name] },
+                {
+                  rejected_characters: [...proposals.rejected_characters, character.source_name],
+                  rejected_character_entries: [
+                    ...(proposals.rejected_character_entries ?? []),
+                    character,
+                  ],
+                },
               ),
           }}
         />
@@ -177,14 +185,20 @@ function CharactersTab() {
       ))}
       <RejectedList
         sources={proposals.rejected_characters}
-        onRestore={(index) =>
+        onRestore={(index) => {
+          // Put the full entry back in review when we kept it; older rejects just unblock.
+          const name = proposals.rejected_characters[index]
+          const entries = proposals.rejected_character_entries ?? []
+          const entry = entries.find((c) => c.source_name === name)
           saveContext({
             proposals: {
               ...proposals,
+              characters: entry ? [...proposals.characters, entry] : proposals.characters,
               rejected_characters: proposals.rejected_characters.filter((_, i) => i !== index),
+              rejected_character_entries: entries.filter((c) => c !== entry),
             },
           })
-        }
+        }}
       />
     </div>
   )
@@ -287,7 +301,10 @@ function TermsTab() {
             onReject: () =>
               setPending(
                 pending.filter((_, i) => i !== index),
-                { rejected_terms: [...proposals.rejected_terms, term.source] },
+                {
+                  rejected_terms: [...proposals.rejected_terms, term.source],
+                  rejected_term_entries: [...(proposals.rejected_term_entries ?? []), term],
+                },
               ),
           }}
         />
@@ -315,14 +332,19 @@ function TermsTab() {
       ))}
       <RejectedList
         sources={proposals.rejected_terms}
-        onRestore={(index) =>
+        onRestore={(index) => {
+          const source = proposals.rejected_terms[index]
+          const entries = proposals.rejected_term_entries ?? []
+          const entry = entries.find((term) => term.source === source)
           saveContext({
             proposals: {
               ...proposals,
+              terms: entry ? [...proposals.terms, entry] : proposals.terms,
               rejected_terms: proposals.rejected_terms.filter((_, i) => i !== index),
+              rejected_term_entries: entries.filter((term) => term !== entry),
             },
           })
-        }
+        }}
       />
     </div>
   )

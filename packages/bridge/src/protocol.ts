@@ -474,6 +474,12 @@ export type Proposals = {
 	term_updates: TermUpdate[],
 	rejected_characters: string[],
 	rejected_terms: string[],
+	/**
+	 *  Full rejected entries, so restoring puts them back in review. Rejects made before
+	 *  revision 3 only have the source name and restore as unblocked only.
+	 */
+	rejected_character_entries?: Character[],
+	rejected_term_entries?: Term[],
 	/**  Send pending entries in prompts, marked tentative. */
 	use_in_prompts: boolean,
 };

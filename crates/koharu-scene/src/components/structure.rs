@@ -116,7 +116,7 @@ pub struct TermUpdate {
 /// Kept apart from `CharacterSheet`/`TermList` so those stay the approved, always-sent data:
 /// approving moves an entry across, and rejected sources are remembered here so they are
 /// never proposed again.
-#[revisioned(revision = 2)]
+#[revisioned(revision = 3)]
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub struct Proposals {
     pub characters: Vec<Character>,
@@ -128,6 +128,14 @@ pub struct Proposals {
     pub term_updates: Vec<TermUpdate>,
     pub rejected_characters: Vec<String>,
     pub rejected_terms: Vec<String>,
+    /// Full rejected entries, so restoring puts them back in review. Rejects made before
+    /// revision 3 only have the source name and restore as unblocked only.
+    #[revision(start = 3)]
+    #[serde(default)]
+    pub rejected_character_entries: Vec<Character>,
+    #[revision(start = 3)]
+    #[serde(default)]
+    pub rejected_term_entries: Vec<Term>,
     /// Send pending entries in prompts, marked tentative.
     pub use_in_prompts: bool,
 }

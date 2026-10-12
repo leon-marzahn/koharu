@@ -21,6 +21,8 @@ const emptyProposals: Proposals = {
   term_updates: [],
   rejected_characters: [],
   rejected_terms: [],
+  rejected_character_entries: [],
+  rejected_term_entries: [],
   use_in_prompts: false,
 }
 
@@ -163,6 +165,7 @@ describe('project panel', () => {
         ...proposals,
         characters: [proposals.characters[1]],
         rejected_characters: ['ボブ'],
+        rejected_character_entries: [bob],
       }),
     )
   })
@@ -188,6 +191,7 @@ describe('project panel', () => {
         ...proposals,
         terms: [],
         rejected_terms: ['勇者', '魔王'],
+        rejected_term_entries: [demon],
       }),
     )
 
@@ -195,7 +199,23 @@ describe('project panel', () => {
     expect(screen.getByText('勇者')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Restore 勇者' }))
     await waitFor(() =>
-      expect(setContext).toHaveBeenLastCalledWith([], [], { ...proposals, rejected_terms: [] }),
+      expect(setContext).toHaveBeenLastCalledWith([], [], {
+        ...proposals,
+        rejected_terms: [],
+        rejected_term_entries: [],
+      }),
+    )
+  })
+
+  it('restores a rejected entry back into review', async () => {
+    const user = userEvent.setup()
+    const setContext = vi.spyOn(commands, 'setContext').mockResolvedValue(null)
+    install([], [], { ...emptyProposals, rejected_terms: ['魔王'], rejected_term_entries: [demon] })
+    await user.click(screen.getByRole('tab', { name: 'Term list' }))
+    await user.click(screen.getByText('Rejected (1)'))
+    await user.click(screen.getByRole('button', { name: 'Restore 魔王' }))
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([], [], { ...emptyProposals, terms: [demon] }),
     )
   })
 
