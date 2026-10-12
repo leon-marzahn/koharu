@@ -320,6 +320,22 @@
     "ocr": "각 영역 안의 텍스트를 읽습니다.",
     "translation": "원문을 대상 언어로 번역합니다."
   },
+  "project": {
+    "title": "프로젝트",
+    "characters": "등장인물",
+    "tabs": "프로젝트 섹션",
+    "add": "등장인물 추가",
+    "delete": "{{name}} 삭제",
+    "empty": "등장인물이 아직 없습니다. 모든 항목이 번역 요청마다 전송됩니다.",
+    "entry": "등장인물 {{number}}",
+    "unnamed": "이름 없음",
+    "sourceName": "원문 이름",
+    "targetName": "번역 이름",
+    "speechStyle": "말투",
+    "appearance": "외모",
+    "notes": "메모",
+    "open": "프로젝트"
+  },
   "providerDescriptions": {
     "caiyun": "Caiyun 번역 API입니다.",
     "claude": "Anthropic Claude 모델입니다.",

@@ -4,12 +4,13 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_desktop::Frame;
 use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
-    Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, Point as ScenePoint,
-    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion,
-    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText,
-    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
-    Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
+    AssetInput, AssetMetadata, AssetRole, At, Authored, Character, CharacterSheet, Commit,
+    EntityId, EntityOrigin, Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft,
+    Point as ScenePoint, Presents, RasterLayer as SceneRasterLayer, RasterLayerKind,
+    Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
+    SourceText as SceneSourceText, TextGroup as SceneTextGroup, TextLayout as SceneTextLayout,
+    TextLayoutKind, Translation as SceneTranslation, Typography as SceneTypography,
+    Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
@@ -33,6 +34,7 @@ pub struct ProjectInfo {
     pub active_page: Option<EntityId>,
     pub can_undo: bool,
     pub can_redo: bool,
+    pub characters: Vec<Character>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -320,7 +322,21 @@ impl Project {
             active_page: self.active_page,
             can_undo: !self.undo.is_empty(),
             can_redo: !self.redo.is_empty(),
+            characters: self
+                .snapshot()
+                .project_component::<CharacterSheet>()
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+                .characters,
         }
+    }
+
+    pub(crate) async fn set_characters(&mut self, characters: Vec<Character>) -> Result<Commit> {
+        let patch = self
+            .snapshot()
+            .patch(|edit| edit.set_project(&CharacterSheet { characters }))?;
+        self.commit(patch).await
     }
 
     pub(crate) fn pages(snapshot: &Snapshot) -> Result<Vec<PageSummary>> {
@@ -1442,6 +1458,32 @@ mod tests {
                 .label,
             "latest manual"
         );
+    }
+
+    #[tokio::test]
+    async fn character_sheet_is_saved_in_the_project_and_undoable() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        assert!(project.info().characters.is_empty());
+
+        let alice = Character {
+            source_name: "アリス".into(),
+            target_name: "Alice".into(),
+            ..Character::default()
+        };
+        let commit = project.set_characters(vec![alice.clone()]).await.unwrap();
+        project.record_commit(&commit);
+        assert_eq!(project.info().characters, [alice.clone()]);
+
+        let commit = project.set_characters(Vec::new()).await.unwrap();
+        project.record_commit(&commit);
+        assert!(project.info().characters.is_empty());
+
+        project.undo().await.unwrap();
+        assert_eq!(project.info().characters, [alice]);
+        project.undo().await.unwrap();
+        assert!(project.info().characters.is_empty());
+        project.redo().await.unwrap();
+        assert_eq!(project.info().characters.len(), 1);
     }
 
     #[test]

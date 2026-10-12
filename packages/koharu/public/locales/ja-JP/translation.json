@@ -320,6 +320,22 @@
     "ocr": "各領域内の原文を読み取ります。",
     "translation": "原文を対象言語に翻訳します。"
   },
+  "project": {
+    "title": "プロジェクト",
+    "characters": "キャラクター",
+    "tabs": "プロジェクトのセクション",
+    "add": "キャラクターを追加",
+    "delete": "{{name}} を削除",
+    "empty": "キャラクターはまだありません。すべての項目が翻訳リクエストごとに送信されます。",
+    "entry": "キャラクター {{number}}",
+    "unnamed": "名前なし",
+    "sourceName": "原文の名前",
+    "targetName": "訳文の名前",
+    "speechStyle": "話し方",
+    "appearance": "外見",
+    "notes": "メモ",
+    "open": "プロジェクト"
+  },
   "providerDescriptions": {
     "caiyun": "Caiyun 翻訳 API。",
     "claude": "Anthropic Claude モデル。",

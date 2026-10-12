@@ -320,6 +320,22 @@
     "ocr": "讀取每個區域中的文字。",
     "translation": "將原文翻譯為目標語言。"
   },
+  "project": {
+    "title": "專案",
+    "characters": "角色",
+    "tabs": "專案分區",
+    "add": "新增角色",
+    "delete": "刪除 {{name}}",
+    "empty": "還沒有角色。每個項目都會隨每次翻譯請求傳送。",
+    "entry": "角色 {{number}}",
+    "unnamed": "未命名",
+    "sourceName": "原文名稱",
+    "targetName": "譯文名稱",
+    "speechStyle": "說話風格",
+    "appearance": "外貌",
+    "notes": "備註",
+    "open": "專案"
+  },
   "providerDescriptions": {
     "caiyun": "Caiyun 翻譯 API。",
     "claude": "Anthropic Claude 模型。",

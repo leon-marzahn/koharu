@@ -320,6 +320,22 @@
     "ocr": "Her bölgenin içindeki metni okur.",
     "translation": "Kaynak metni hedef dile çevirir."
   },
+  "project": {
+    "title": "Proje",
+    "characters": "Karakterler",
+    "tabs": "Proje bölümleri",
+    "add": "Karakter ekle",
+    "delete": "{{name}} öğesini sil",
+    "empty": "Henüz karakter yok. Her giriş her çeviri isteğiyle gönderilir.",
+    "entry": "Karakter {{number}}",
+    "unnamed": "adsız",
+    "sourceName": "Kaynak ad",
+    "targetName": "Hedef ad",
+    "speechStyle": "Konuşma tarzı",
+    "appearance": "Görünüm",
+    "notes": "Notlar",
+    "open": "Proje"
+  },
   "providerDescriptions": {
     "caiyun": "Caiyun çeviri API'si.",
     "claude": "Anthropic Claude modelleri.",

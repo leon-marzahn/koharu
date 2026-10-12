@@ -1,7 +1,9 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_scene::{Authored, EntityId, LanguageTag, Origin, Snapshot, SourceText, Translation};
-use koharu_translator::{TranslationContext, TranslationRequest, Translator};
+use koharu_scene::{
+    Authored, CharacterSheet, EntityId, LanguageTag, Origin, Snapshot, SourceText, Translation,
+};
+use koharu_translator::{TranslationCharacter, TranslationContext, TranslationRequest, Translator};
 
 use crate::TranslationConfig;
 
@@ -55,6 +57,23 @@ fn previous_page_hints(
     Ok(pages.into_iter().skip(skip).flatten().collect())
 }
 
+/// Every character sheet entry, on every page: the sheet is small and always relevant.
+fn character_sheet(scene: &Snapshot) -> Result<Vec<TranslationCharacter>> {
+    Ok(scene
+        .project_component::<CharacterSheet>()?
+        .unwrap_or_default()
+        .characters
+        .into_iter()
+        .map(|character| TranslationCharacter {
+            source_name: character.source_name,
+            target_name: character.target_name,
+            speech_style: character.speech_style,
+            appearance: character.appearance,
+            notes: character.notes,
+        })
+        .collect())
+}
+
 #[async_trait]
 impl StageProcessor for Processor {
     fn model(&self) -> &'static str {
@@ -96,7 +115,8 @@ impl StageProcessor for Processor {
             targets.iter().map(|(_, source)| source.clone()),
             self.config.target_language,
         )
-        .with_context(context);
+        .with_context(context)
+        .with_characters(character_sheet(&input.scene)?);
         if let Some(instructions) = self.config.instructions.as_deref() {
             request = request.with_instructions(instructions);
         }
@@ -146,6 +166,40 @@ mod tests {
     use koharu_scene::{At, Authored, PageDraft, Session, TextLayout, TextLayoutKind, Translation};
 
     use super::*;
+
+    #[tokio::test]
+    async fn every_character_sheet_entry_reaches_the_request() {
+        let mut session = Session::memory().await.unwrap();
+        assert!(character_sheet(&session.snapshot()).unwrap().is_empty());
+        let character = |name: &str| koharu_scene::Character {
+            source_name: name.into(),
+            target_name: format!("{name}-t"),
+            speech_style: "curt".into(),
+            appearance: "tall".into(),
+            notes: "rival".into(),
+        };
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                edit.set_project(&CharacterSheet {
+                    characters: vec![character("a"), character("b")],
+                })
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        let names = character_sheet(&scene)
+            .unwrap()
+            .into_iter()
+            .map(|entry| (entry.source_name, entry.target_name, entry.notes))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            [
+                ("a".into(), "a-t".into(), "rival".into()),
+                ("b".into(), "b-t".into(), "rival".into())
+            ]
+        );
+    }
 
     #[tokio::test]
     async fn hints_use_last_n_translated_pages_in_order_with_user_flag() {

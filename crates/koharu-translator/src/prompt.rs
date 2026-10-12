@@ -5,13 +5,14 @@ use indoc::indoc;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Value, json};
 
-use crate::{Language, TranslationContext, TranslationRequest};
+use crate::{Language, TranslationCharacter, TranslationContext, TranslationRequest};
 
 pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, String)> {
     let input = TranslationInput {
         source_language: request.source_language,
         target_language: request.target_language,
         context: &request.context,
+        characters: &request.characters,
         segments: request
             .segments
             .iter()
@@ -151,6 +152,18 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         "}.trim_end());
     }
 
+    if !request.characters.is_empty() {
+        prompt.push_str("\n\n");
+        prompt.push_str(indoc! {"
+            Character sheet requirements:
+            The `characters` array lists the project's recurring characters; it is sent with every page.
+            Each entry has `source_name`, `target_name`, `speech_style`, `appearance`, and `notes`.
+            Always render a character's name as `target_name` when it is set.
+            Follow `speech_style` for that character's dialogue, and use `appearance` and `notes` to resolve who is speaking and how characters relate.
+            Do not translate or return the character entries.
+        "}.trim_end());
+    }
+
     if request.image.is_some() {
         prompt.push_str("\n\n");
         prompt.push_str(indoc! {"
@@ -177,6 +190,7 @@ struct TranslationInput<'a> {
     source_language: Option<Language>,
     target_language: Language,
     context: &'a [TranslationContext],
+    characters: &'a [TranslationCharacter],
     segments: Vec<TranslationInputSegment<'a>>,
 }
 
@@ -329,6 +343,27 @@ mod tests {
         assert_eq!(input["context"][0]["translation"], "previous");
         assert_eq!(input["segments"][0]["id"], 0);
         assert_eq!(input["segments"][0]["text"], "new");
+    }
+
+    #[test]
+    fn prompt_payload_contains_every_character_and_explains_them() {
+        let character = |name: &str| TranslationCharacter {
+            source_name: name.into(),
+            target_name: format!("{name}-t"),
+            speech_style: "curt".into(),
+            appearance: "tall".into(),
+            notes: "rival".into(),
+        };
+        let request = TranslationRequest::new(["new"], Language::English)
+            .with_characters([character("a"), character("b")]);
+        let (system, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+        assert_eq!(input["characters"].as_array().unwrap().len(), 2);
+        assert_eq!(input["characters"][1]["target_name"], "b-t");
+        assert_eq!(input["characters"][0]["speech_style"], "curt");
+        assert!(system.contains("Character sheet"));
+        let plain = prompts(&TranslationRequest::new(["new"], Language::English)).unwrap();
+        assert!(!plain.0.contains("Character sheet"));
     }
 
     #[test]

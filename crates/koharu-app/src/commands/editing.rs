@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use koharu_desktop::{CanvasState, Desktop};
-use koharu_scene::EntityId;
+use koharu_scene::{Character, EntityId};
 use serde::Deserialize;
 use specta::Type;
 use tauri::State;
@@ -167,6 +167,25 @@ pub(crate) async fn set_translation(
     };
     let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
+    Ok(())
+}
+
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "characters_edited",
+    skip_all,
+    fields(origin = "user", entry_count = characters.len()),
+)]
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_characters(
+    characters: Vec<Character>,
+    project: State<'_, CurrentProject>,
+) -> Result<(), Error> {
+    let mut project = project.project.lock().await;
+    let project = project.as_mut().context("no project is open")?;
+    let commit = project.set_characters(characters).await?;
+    project.record_commit(&commit);
     Ok(())
 }
 

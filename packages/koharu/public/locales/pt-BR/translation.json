@@ -320,6 +320,22 @@
     "ocr": "Lê o texto dentro de cada região.",
     "translation": "Converte o texto original para o idioma de destino."
   },
+  "project": {
+    "title": "Projeto",
+    "characters": "Personagens",
+    "tabs": "Seções do projeto",
+    "add": "Adicionar personagem",
+    "delete": "Excluir {{name}}",
+    "empty": "Nenhum personagem ainda. Cada entrada é enviada em cada solicitação de tradução.",
+    "entry": "Personagem {{number}}",
+    "unnamed": "sem nome",
+    "sourceName": "Nome original",
+    "targetName": "Nome traduzido",
+    "speechStyle": "Estilo de fala",
+    "appearance": "Aparência",
+    "notes": "Notas",
+    "open": "Projeto"
+  },
   "providerDescriptions": {
     "caiyun": "API de tradução do Caiyun.",
     "claude": "Modelos Claude da Anthropic.",

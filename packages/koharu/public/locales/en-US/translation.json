@@ -320,6 +320,22 @@
     "ocr": "Read the text inside each region.",
     "translation": "Convert source text to the target language."
   },
+  "project": {
+    "title": "Project",
+    "characters": "Characters",
+    "tabs": "Project sections",
+    "add": "Add character",
+    "delete": "Delete {{name}}",
+    "empty": "No characters yet. Every entry is sent with every translation request.",
+    "entry": "Character {{number}}",
+    "unnamed": "unnamed",
+    "sourceName": "Source name",
+    "targetName": "Target name",
+    "speechStyle": "Speech style",
+    "appearance": "Appearance",
+    "notes": "Notes",
+    "open": "Project"
+  },
   "providerDescriptions": {
     "caiyun": "Caiyun translation API.",
     "claude": "Anthropic Claude models.",

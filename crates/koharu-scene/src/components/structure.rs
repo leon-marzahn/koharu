@@ -40,6 +40,32 @@ impl Component for Project {
     }
 }
 
+/// One entry of the project's character sheet; all fields are free text.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct Character {
+    pub source_name: String,
+    pub target_name: String,
+    pub speech_style: String,
+    pub appearance: String,
+    pub notes: String,
+}
+
+/// Per-project character sheet, sent with every translation request.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct CharacterSheet {
+    pub characters: Vec<Character>,
+}
+
+impl Component for CharacterSheet {
+    const KIND: &'static str = "dev.koharu.character-sheet";
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Page {

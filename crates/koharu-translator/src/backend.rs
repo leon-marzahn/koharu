@@ -17,6 +17,7 @@ pub struct TranslationRequest {
     pub target_language: Language,
     pub instructions: Option<String>,
     pub context: Vec<TranslationContext>,
+    pub characters: Vec<TranslationCharacter>,
     pub image: Option<Arc<DynamicImage>>,
 }
 
@@ -32,6 +33,7 @@ impl TranslationRequest {
             target_language,
             instructions: None,
             context: Vec::new(),
+            characters: Vec::new(),
             image: None,
         }
     }
@@ -58,6 +60,15 @@ impl TranslationRequest {
     #[must_use]
     pub fn with_context(mut self, context: impl IntoIterator<Item = TranslationContext>) -> Self {
         self.context = context.into_iter().collect();
+        self
+    }
+
+    #[must_use]
+    pub fn with_characters(
+        mut self,
+        characters: impl IntoIterator<Item = TranslationCharacter>,
+    ) -> Self {
+        self.characters = characters.into_iter().collect();
         self
     }
 
@@ -126,6 +137,16 @@ pub struct TranslationContext {
     pub translation: String,
     /// The user wrote or edited this translation, so the model should treat it as authoritative.
     pub user_corrected: bool,
+}
+
+/// A project character sheet entry. Sent on every request, unlike `context`, which is per-page.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TranslationCharacter {
+    pub source_name: String,
+    pub target_name: String,
+    pub speech_style: String,
+    pub appearance: String,
+    pub notes: String,
 }
 
 impl TranslationContext {

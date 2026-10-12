@@ -59,6 +59,7 @@ const project: ProjectInfo = {
   active_page: null,
   can_undo: true,
   can_redo: false,
+  characters: [],
 }
 
 beforeEach(() => {
