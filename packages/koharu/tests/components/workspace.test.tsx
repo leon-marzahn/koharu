@@ -512,7 +512,7 @@ describe('canvas interaction adapter', () => {
             type: 'text',
             id: 'element',
             parent: 'page',
-            geometry: layer.geometry,
+            geometry: (layer as Extract<Layer, { type: 'image' }>).geometry,
             angle_degrees: 0,
             visibility: { visible: true, opacity: 1 },
             content: {
