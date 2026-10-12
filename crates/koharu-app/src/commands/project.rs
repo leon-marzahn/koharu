@@ -14,8 +14,8 @@ use koharu_scene::{
     RasterLayer as SceneRasterLayer, RasterLayerKind, RecognizedFrom, Region as SceneRegion,
     RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText, StalePage, Term,
     TermList, TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
-    TextRegion,
-    Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
+    TextRegion, Translation as SceneTranslation, Typography as SceneTypography,
+    Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
