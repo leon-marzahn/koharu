@@ -26,7 +26,7 @@ pub use component::{Component, ValidationContext};
 pub use components::{
     Asset, AssetInput, AssetMetadata, AssetRole, Authored, Character, CharacterSheet,
     DetectionAnalysis, DetectionLabel, EntityOrigin, FontStyle, Generation, Geometry, Group,
-    LanguageTag, OcrAnalysis, Origin, Page, PageDraft, Point, Project, RasterLayer,
+    LanguageTag, OcrAnalysis, Origin, Page, PageDraft, Point, Project, Proposals, RasterLayer,
     RasterLayerKind, Region, RegionKind, Relation, RelationKind, SourceText, Term, TermList,
     TextAlignment, TextContent, TextDirection, TextGroup, TextLayout, TextLayoutKind, TextRole,
     Translation, Typography, Visibility, WritingMode,

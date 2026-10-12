@@ -344,6 +344,15 @@
     "termSource": "원문",
     "termTarget": "번역어",
     "termNote": "메모(선택)",
+    "usePending": "보류 중인 항목을 프롬프트에 사용",
+    "pending": "검토 대기",
+    "approve": "{{name}} 승인",
+    "approveShort": "승인",
+    "reject": "{{name}} 거부",
+    "restore": "{{name}} 복원",
+    "restoreShort": "복원",
+    "rejected": "거부됨 ({{count}})",
+    "pendingCount": "보류 중 {{count}}개",
     "open": "프로젝트"
   },
   "providerDescriptions": {

@@ -7,11 +7,14 @@ import { useTranslation } from 'react-i18next'
 import { AgentPanel } from '@/components/editor/AgentPanel'
 import { Inspector } from '@/components/editor/Inspector'
 import { ProjectPanel } from '@/components/editor/ProjectPanel'
+import { useProject } from '@/lib/queries'
 import { Button } from '@koharu/ui/components/button'
 
 export function RightSidebar() {
   const { t } = useTranslation()
   const [panel, setPanel] = useState<'agent' | 'properties' | 'project'>('properties')
+  const proposals = useProject().data?.proposals
+  const pending = (proposals?.characters.length ?? 0) + (proposals?.terms.length ?? 0)
 
   return (
     <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-panel)]'>
@@ -31,6 +34,12 @@ export function RightSidebar() {
           onClick={() => setPanel('project')}
         >
           <BookUser className='size-3' /> {t('project.title')}
+          {pending > 0 && (
+            <span className='rounded-full bg-primary px-1 text-[9px] text-primary-foreground'>
+              <span aria-hidden='true'>{pending}</span>
+              <span className='sr-only'>{t('project.pendingCount', { count: pending })}</span>
+            </span>
+          )}
         </Button>
         <Button
           variant={panel === 'agent' ? 'secondary' : 'ghost'}

@@ -79,7 +79,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &TranslationGeneration,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<crate::Translated> {
     let api_key = koharu_secrets::get("gemini")?.context("gemini API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let schema = prompt::output_schema(request.segments.len());

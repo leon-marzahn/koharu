@@ -46,7 +46,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<crate::Translated> {
     let api_key = koharu_secrets::get("minimax")?.context("minimax API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let response: Response = send_json(

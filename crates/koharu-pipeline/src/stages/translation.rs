@@ -1,11 +1,12 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{
-    Authored, CharacterSheet, EntityId, LanguageTag, Origin, Snapshot, SourceText, TermList,
-    Translation,
+    Authored, CharacterSheet, EntityId, LanguageTag, Origin, Proposals, Snapshot, SourceText,
+    TermList, Translation,
 };
 use koharu_translator::{
-    TranslationCharacter, TranslationContext, TranslationRequest, TranslationTerm, Translator,
+    TranslationCharacter, TranslationContext, TranslationProposals, TranslationRequest,
+    TranslationTerm, Translator,
 };
 
 use crate::TranslationConfig;
@@ -60,39 +61,116 @@ fn previous_page_hints(
     Ok(pages.into_iter().skip(skip).flatten().collect())
 }
 
-/// Every character sheet entry, on every page: the sheet is small and always relevant.
+fn proposals(scene: &Snapshot) -> Result<Proposals> {
+    Ok(scene.project_component::<Proposals>()?.unwrap_or_default())
+}
+
+/// Every approved character sheet entry, on every page: the sheet is small and always relevant.
+/// Pending entries follow, marked tentative, only when the project opts in.
 fn character_sheet(scene: &Snapshot) -> Result<Vec<TranslationCharacter>> {
-    Ok(scene
+    let proposals = proposals(scene)?;
+    let pending = proposals.use_in_prompts.then_some(proposals.characters);
+    let approved = scene
         .project_component::<CharacterSheet>()?
         .unwrap_or_default()
-        .characters
+        .characters;
+    Ok(approved
         .into_iter()
-        .map(|character| TranslationCharacter {
+        .map(|character| (character, false))
+        .chain(pending.into_iter().flatten().map(|c| (c, true)))
+        .map(|(character, tentative)| TranslationCharacter {
             source_name: character.source_name,
             target_name: character.target_name,
             speech_style: character.speech_style,
             appearance: character.appearance,
             notes: character.notes,
+            tentative,
         })
         .collect())
 }
 
-/// Term list entries whose source is a substring of at least one segment of the page.
+/// Term list entries whose source is a substring of at least one segment of the page, with
+/// pending ones (tentative) only when the project opts in.
 fn page_terms(scene: &Snapshot, segments: &[&str]) -> Result<Vec<TranslationTerm>> {
-    Ok(scene
+    let proposals = proposals(scene)?;
+    let pending = proposals.use_in_prompts.then_some(proposals.terms);
+    let approved = scene
         .project_component::<TermList>()?
         .unwrap_or_default()
-        .terms
+        .terms;
+    Ok(approved
         .into_iter()
-        .filter(|term| {
+        .map(|term| (term, false))
+        .chain(pending.into_iter().flatten().map(|t| (t, true)))
+        .filter(|(term, _)| {
             !term.source.is_empty() && segments.iter().any(|text| text.contains(&term.source))
         })
-        .map(|term| TranslationTerm {
+        .map(|(term, tentative)| TranslationTerm {
             source: term.source,
             target: term.target,
             note: term.note,
+            tentative,
         })
         .collect())
+}
+
+/// Sources the model must not propose: rejected and pending ones (pending entries are not always
+/// in the prompt). Approved entries are already visible to the model in the sheet and term list.
+fn known_sources(scene: &Snapshot) -> Result<Vec<String>> {
+    let proposals = proposals(scene)?;
+    Ok(proposals
+        .rejected_characters
+        .into_iter()
+        .chain(proposals.rejected_terms)
+        .chain(proposals.characters.into_iter().map(|c| c.source_name))
+        .chain(proposals.terms.into_iter().map(|t| t.source))
+        .collect())
+}
+
+/// Adds returned proposals as pending entries, dropping any whose source already exists in the
+/// sheet, term list, pending list or rejected list. Returns `None` when nothing is new.
+fn merge_proposals(scene: &Snapshot, new: TranslationProposals) -> Result<Option<Proposals>> {
+    let mut merged = proposals(scene)?;
+    let sheet = scene
+        .project_component::<CharacterSheet>()?
+        .unwrap_or_default();
+    let terms = scene.project_component::<TermList>()?.unwrap_or_default();
+    let before = (merged.characters.len(), merged.terms.len());
+    for character in new.characters {
+        let source = character.source_name.trim().to_owned();
+        let known = |name: &str| name.trim() == source;
+        if source.is_empty()
+            || sheet.characters.iter().any(|c| known(&c.source_name))
+            || merged.characters.iter().any(|c| known(&c.source_name))
+            || merged.rejected_characters.iter().any(|name| known(name))
+        {
+            continue;
+        }
+        merged.characters.push(koharu_scene::Character {
+            source_name: source,
+            target_name: character.target_name,
+            speech_style: character.speech_style,
+            appearance: character.appearance,
+            notes: character.notes,
+        });
+    }
+    for term in new.terms {
+        let source = term.source.trim().to_owned();
+        let known = |name: &str| name.trim() == source;
+        if source.is_empty()
+            || terms.terms.iter().any(|t| known(&t.source))
+            || merged.terms.iter().any(|t| known(&t.source))
+            || merged.rejected_terms.iter().any(|name| known(name))
+        {
+            continue;
+        }
+        merged.terms.push(koharu_scene::Term {
+            source,
+            target: term.target,
+            note: term.note,
+        });
+    }
+    Ok((before != (merged.characters.len(), merged.terms.len())).then_some(merged))
 }
 
 #[async_trait]
@@ -141,7 +219,8 @@ impl StageProcessor for Processor {
         .with_terms(page_terms(
             &input.scene,
             &targets.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>(),
-        )?);
+        )?)
+        .with_known_sources(known_sources(&input.scene)?);
         if let Some(instructions) = self.config.instructions.as_deref() {
             request = request.with_instructions(instructions);
         }
@@ -161,7 +240,12 @@ impl StageProcessor for Processor {
             edit.observe::<SourceText>(*entity)?;
             edit.observe::<Translation>(*entity)?;
         }
-        for ((entity, source), text) in targets.into_iter().zip(translated) {
+        // ponytail: replaces the whole component from this page's snapshot, so a review made while
+        // pages translate concurrently can be overwritten; add project-level observation if it bites.
+        if let Some(merged) = merge_proposals(&input.scene, translated.proposals)? {
+            edit.set_project(&merged)?;
+        }
+        for ((entity, source), text) in targets.into_iter().zip(translated.segments) {
             if input
                 .scene
                 .component::<Translation>(entity)?
@@ -347,5 +431,124 @@ mod tests {
         assert_eq!(lines(pages[4], 1), [("d".into(), "D".into(), false)]);
         assert_eq!(lines(pages[4], 0), []);
         assert_eq!(lines(pages[0], 2), []);
+    }
+
+    async fn scene_with(
+        sheet: Vec<koharu_scene::Character>,
+        terms: Vec<koharu_scene::Term>,
+        proposals: Proposals,
+    ) -> Snapshot {
+        let mut session = Session::memory().await.unwrap();
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                edit.set_project(&CharacterSheet { characters: sheet })?;
+                edit.set_project(&TermList { terms })?;
+                edit.set_project(&proposals)
+            })
+            .unwrap();
+        session.commit(patch).await.unwrap().snapshot
+    }
+
+    fn character(name: &str) -> koharu_scene::Character {
+        koharu_scene::Character {
+            source_name: name.into(),
+            ..Default::default()
+        }
+    }
+
+    fn term(source: &str) -> koharu_scene::Term {
+        koharu_scene::Term {
+            source: source.into(),
+            target: format!("{source}-t"),
+            note: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn pending_entries_are_excluded_unless_the_project_opts_in() {
+        let mut proposals = Proposals {
+            characters: vec![character("pending")],
+            terms: vec![term("魔王")],
+            ..Default::default()
+        };
+        let scene = scene_with(vec![character("approved")], vec![], proposals.clone()).await;
+        let names = |scene: &Snapshot| {
+            character_sheet(scene)
+                .unwrap()
+                .into_iter()
+                .map(|c| (c.source_name, c.tentative))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(&scene), [("approved".into(), false)]);
+        assert!(page_terms(&scene, &["魔王"]).unwrap().is_empty());
+
+        proposals.use_in_prompts = true;
+        let scene = scene_with(vec![character("approved")], vec![], proposals).await;
+        assert_eq!(
+            names(&scene),
+            [("approved".into(), false), ("pending".into(), true)]
+        );
+        let terms = page_terms(&scene, &["魔王"]).unwrap();
+        assert_eq!((terms.len(), terms[0].tentative), (1, true));
+    }
+
+    #[tokio::test]
+    async fn returned_proposals_are_stored_pending_and_known_sources_are_dropped() {
+        let scene = scene_with(
+            vec![character("a")],
+            vec![term("t")],
+            Proposals {
+                characters: vec![character("p")],
+                terms: vec![term("pt")],
+                rejected_characters: vec!["rc".into()],
+                rejected_terms: vec!["rt".into()],
+                use_in_prompts: false,
+            },
+        )
+        .await;
+        let new = TranslationProposals {
+            characters: ["new", "a", "p", "rc", "new", " "]
+                .map(|name| TranslationCharacter {
+                    source_name: name.into(),
+                    target_name: "x".into(),
+                    ..Default::default()
+                })
+                .into(),
+            terms: ["newt", "t", "pt", "rt"]
+                .map(|source| TranslationTerm {
+                    source: source.into(),
+                    ..Default::default()
+                })
+                .into(),
+        };
+        let merged = merge_proposals(&scene, new).unwrap().unwrap();
+        let sources = |p: &Proposals| {
+            (
+                p.characters
+                    .iter()
+                    .map(|c| c.source_name.clone())
+                    .collect::<Vec<_>>(),
+                p.terms.iter().map(|t| t.source.clone()).collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            sources(&merged),
+            (
+                vec!["p".into(), "new".into()],
+                vec!["pt".into(), "newt".into()]
+            )
+        );
+        // Rejections survive, and nothing was applied to the approved sheet or term list.
+        assert_eq!(merged.rejected_characters, ["rc"]);
+        assert_eq!(character_sheet(&scene).unwrap().len(), 1);
+        assert!(
+            merge_proposals(&scene, TranslationProposals::default())
+                .unwrap()
+                .is_none()
+        );
+        let mut known = known_sources(&scene).unwrap();
+        known.sort();
+        assert_eq!(known, ["p", "pt", "rc", "rt"]);
     }
 }

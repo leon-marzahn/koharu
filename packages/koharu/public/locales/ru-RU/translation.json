@@ -344,6 +344,15 @@
     "termSource": "Оригинал",
     "termTarget": "Перевод",
     "termNote": "Заметка (необязательно)",
+    "usePending": "Использовать ожидающие записи в промптах",
+    "pending": "Ожидают проверки",
+    "approve": "Утвердить {{name}}",
+    "approveShort": "Утвердить",
+    "reject": "Отклонить {{name}}",
+    "restore": "Восстановить {{name}}",
+    "restoreShort": "Восстановить",
+    "rejected": "Отклонённые ({{count}})",
+    "pendingCount": "Ожидают: {{count}}",
     "open": "Проект"
   },
   "providerDescriptions": {

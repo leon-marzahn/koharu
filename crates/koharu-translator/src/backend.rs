@@ -19,6 +19,8 @@ pub struct TranslationRequest {
     pub context: Vec<TranslationContext>,
     pub characters: Vec<TranslationCharacter>,
     pub terms: Vec<TranslationTerm>,
+    /// Sources the model must not propose: rejected ones and pending ones not sent above.
+    pub known_sources: Vec<String>,
     pub image: Option<Arc<DynamicImage>>,
 }
 
@@ -36,6 +38,7 @@ impl TranslationRequest {
             context: Vec::new(),
             characters: Vec::new(),
             terms: Vec::new(),
+            known_sources: Vec::new(),
             image: None,
         }
     }
@@ -77,6 +80,12 @@ impl TranslationRequest {
     #[must_use]
     pub fn with_terms(mut self, terms: impl IntoIterator<Item = TranslationTerm>) -> Self {
         self.terms = terms.into_iter().collect();
+        self
+    }
+
+    #[must_use]
+    pub fn with_known_sources(mut self, sources: impl IntoIterator<Item = String>) -> Self {
+        self.known_sources = sources.into_iter().collect();
         self
     }
 
@@ -148,21 +157,53 @@ pub struct TranslationContext {
 }
 
 /// A project character sheet entry. Sent on every request, unlike `context`, which is per-page.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// Also the shape of a character the model proposes, so every field tolerates being absent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct TranslationCharacter {
     pub source_name: String,
     pub target_name: String,
     pub speech_style: String,
     pub appearance: String,
     pub notes: String,
+    /// A pending entry the user has not approved yet.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tentative: bool,
 }
 
-/// A term list entry already filtered to the page being translated.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// A term list entry already filtered to the page being translated; also a proposed term.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct TranslationTerm {
     pub source: String,
     pub target: String,
     pub note: String,
+    /// A pending entry the user has not approved yet.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tentative: bool,
+}
+
+/// New characters and terms the model suggests; never applied without review.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TranslationProposals {
+    pub characters: Vec<TranslationCharacter>,
+    pub terms: Vec<TranslationTerm>,
+}
+
+/// A finished translation: one text per input segment, plus optional proposals.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Translated {
+    pub segments: Vec<String>,
+    pub proposals: TranslationProposals,
+}
+
+impl From<Vec<String>> for Translated {
+    fn from(segments: Vec<String>) -> Self {
+        Self {
+            segments,
+            proposals: TranslationProposals::default(),
+        }
+    }
 }
 
 impl TranslationContext {

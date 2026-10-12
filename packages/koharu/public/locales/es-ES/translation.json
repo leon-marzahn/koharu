@@ -344,6 +344,15 @@
     "termSource": "Origen",
     "termTarget": "Destino",
     "termNote": "Nota (opcional)",
+    "usePending": "Usar entradas pendientes en los prompts",
+    "pending": "Pendientes de revisión",
+    "approve": "Aprobar {{name}}",
+    "approveShort": "Aprobar",
+    "reject": "Rechazar {{name}}",
+    "restore": "Restaurar {{name}}",
+    "restoreShort": "Restaurar",
+    "rejected": "Rechazadas ({{count}})",
+    "pendingCount": "{{count}} entradas pendientes",
     "open": "Proyecto"
   },
   "providerDescriptions": {

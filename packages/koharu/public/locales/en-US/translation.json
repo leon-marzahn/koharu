@@ -344,6 +344,15 @@
     "termSource": "Source",
     "termTarget": "Target",
     "termNote": "Note (optional)",
+    "usePending": "Use pending entries in prompts",
+    "pending": "Pending review",
+    "approve": "Approve {{name}}",
+    "approveShort": "Approve",
+    "reject": "Reject {{name}}",
+    "restore": "Restore {{name}}",
+    "restoreShort": "Restore",
+    "rejected": "Rejected ({{count}})",
+    "pendingCount": "{{count}} pending entries",
     "open": "Project"
   },
   "providerDescriptions": {

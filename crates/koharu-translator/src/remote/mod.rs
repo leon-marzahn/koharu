@@ -40,7 +40,7 @@ pub(crate) async fn translate(
     selection: &ModelSelection,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<crate::Translated> {
     let model = || {
         selection
             .model
@@ -83,11 +83,17 @@ pub(crate) async fn translate(
         Provider::LmStudio => {
             lm_studio::translate(client, &providers.lm_studio, model()?, generation, request).await
         }
-        Provider::DeepL => deepl::translate(client, &providers.deepl, request).await,
+        Provider::DeepL => deepl::translate(client, &providers.deepl, request)
+            .await
+            .map(Into::into),
         Provider::GoogleCloudTranslation => {
-            google_cloud::translate(client, &providers.google_cloud_translation, request).await
+            google_cloud::translate(client, &providers.google_cloud_translation, request)
+                .await
+                .map(Into::into)
         }
-        Provider::Caiyun => caiyun::translate(client, &providers.caiyun, request).await,
+        Provider::Caiyun => caiyun::translate(client, &providers.caiyun, request)
+            .await
+            .map(Into::into),
         Provider::Local => unreachable!("local translation has its own backend"),
     }
 }

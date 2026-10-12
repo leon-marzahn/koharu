@@ -6,7 +6,7 @@ use koharu_desktop::Frame;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Character, CharacterSheet, Commit,
     EntityId, EntityOrigin, FitsTo, FlowsIn, Geometry as SceneGeometry, Group as SceneGroup,
-    Origin, PageDraft, Point as ScenePoint, Presents, RasterLayer as SceneRasterLayer,
+    Origin, PageDraft, Point as ScenePoint, Presents, Proposals, RasterLayer as SceneRasterLayer,
     RasterLayerKind, Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
     SourceText as SceneSourceText, Term, TermList, TextGroup as SceneTextGroup,
     TextLayout as SceneTextLayout, TextLayoutKind, Translation as SceneTranslation,
@@ -36,6 +36,7 @@ pub struct ProjectInfo {
     pub can_redo: bool,
     pub characters: Vec<Character>,
     pub terms: Vec<Term>,
+    pub proposals: Proposals,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -337,7 +338,29 @@ impl Project {
                 .flatten()
                 .unwrap_or_default()
                 .terms,
+            proposals: self
+                .snapshot()
+                .project_component::<Proposals>()
+                .ok()
+                .flatten()
+                .unwrap_or_default(),
         }
+    }
+
+    /// Writes the sheet, term list and proposals in one commit so approving an entry
+    /// (moving it from pending to approved) is a single undo step.
+    pub(crate) async fn set_context(
+        &mut self,
+        characters: Vec<Character>,
+        terms: Vec<Term>,
+        proposals: Proposals,
+    ) -> Result<Commit> {
+        let patch = self.snapshot().patch(|edit| {
+            edit.set_project(&CharacterSheet { characters })?;
+            edit.set_project(&TermList { terms })?;
+            edit.set_project(&proposals)
+        })?;
+        self.commit(patch).await
     }
 
     pub(crate) async fn set_characters(&mut self, characters: Vec<Character>) -> Result<Commit> {
@@ -1672,5 +1695,45 @@ mod tests {
             &[ScenePoint { x: 2.0, y: 2.0 }],
         );
         assert_eq!(white.get_pixel(2, 2).0, [255, 255, 255, 255]);
+    }
+
+    #[tokio::test]
+    async fn approving_a_proposal_is_one_undoable_commit_and_rejections_persist() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        assert_eq!(project.info().proposals, Proposals::default());
+
+        let pending = Term {
+            source: "魔王".into(),
+            target: "Demon King".into(),
+            ..Term::default()
+        };
+        let proposals = Proposals {
+            terms: vec![pending.clone()],
+            rejected_characters: vec!["bob".into()],
+            ..Proposals::default()
+        };
+        let commit = project
+            .set_context(Vec::new(), Vec::new(), proposals.clone())
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        assert_eq!(project.info().proposals, proposals);
+        assert!(project.info().terms.is_empty());
+
+        let approved = Proposals {
+            terms: Vec::new(),
+            ..proposals.clone()
+        };
+        let commit = project
+            .set_context(Vec::new(), vec![pending.clone()], approved.clone())
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        assert_eq!(project.info().terms, [pending]);
+        assert_eq!(project.info().proposals, approved);
+
+        project.undo().await.unwrap();
+        assert!(project.info().terms.is_empty());
+        assert_eq!(project.info().proposals, proposals);
     }
 }

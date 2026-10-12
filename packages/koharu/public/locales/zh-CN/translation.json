@@ -344,6 +344,15 @@
     "termSource": "原文",
     "termTarget": "译文",
     "termNote": "备注（可选）",
+    "usePending": "在提示词中使用待定条目",
+    "pending": "待审核",
+    "approve": "批准 {{name}}",
+    "approveShort": "批准",
+    "reject": "拒绝 {{name}}",
+    "restore": "恢复 {{name}}",
+    "restoreShort": "恢复",
+    "rejected": "已拒绝（{{count}}）",
+    "pendingCount": "{{count}} 个待定条目",
     "open": "项目"
   },
   "providerDescriptions": {

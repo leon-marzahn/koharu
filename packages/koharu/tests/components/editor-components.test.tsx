@@ -206,6 +206,13 @@ function installProject() {
     can_redo: false,
     characters: [],
     terms: [],
+    proposals: {
+      characters: [],
+      terms: [],
+      rejected_characters: [],
+      rejected_terms: [],
+      use_in_prompts: false,
+    },
   })
   queryClient.setQueryData(pagesKey, [
     {
@@ -541,6 +548,13 @@ describe('greenfield editor', () => {
           can_redo: false,
           characters: [],
           terms: [],
+          proposals: {
+            characters: [],
+            terms: [],
+            rejected_characters: [],
+            rejected_terms: [],
+            use_in_prompts: false,
+          },
         },
         page: pages[2]!,
       })
@@ -556,6 +570,13 @@ describe('greenfield editor', () => {
           can_redo: false,
           characters: [],
           terms: [],
+          proposals: {
+            characters: [],
+            terms: [],
+            rejected_characters: [],
+            rejected_terms: [],
+            use_in_prompts: false,
+          },
         },
         page: pages[1]!,
       })

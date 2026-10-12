@@ -344,6 +344,15 @@
     "termSource": "原文",
     "termTarget": "譯文",
     "termNote": "備註（選填）",
+    "usePending": "在提示詞中使用待定項目",
+    "pending": "待審核",
+    "approve": "核准 {{name}}",
+    "approveShort": "核准",
+    "reject": "拒絕 {{name}}",
+    "restore": "還原 {{name}}",
+    "restoreShort": "還原",
+    "rejected": "已拒絕（{{count}}）",
+    "pendingCount": "{{count}} 個待定項目",
     "open": "專案"
   },
   "providerDescriptions": {

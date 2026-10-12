@@ -90,6 +90,30 @@ impl Component for TermList {
     }
 }
 
+/// Model-proposed character and term entries awaiting review, plus the user's review state.
+///
+/// Kept apart from `CharacterSheet`/`TermList` so those stay the approved, always-sent data:
+/// approving moves an entry across, and rejected sources are remembered here so they are
+/// never proposed again.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct Proposals {
+    pub characters: Vec<Character>,
+    pub terms: Vec<Term>,
+    pub rejected_characters: Vec<String>,
+    pub rejected_terms: Vec<String>,
+    /// Send pending entries in prompts, marked tentative.
+    pub use_in_prompts: bool,
+}
+
+impl Component for Proposals {
+    const KIND: &'static str = "dev.koharu.proposals";
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Page {

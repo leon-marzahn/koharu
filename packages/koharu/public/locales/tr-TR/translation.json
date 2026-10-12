@@ -344,6 +344,15 @@
     "termSource": "Kaynak",
     "termTarget": "Hedef",
     "termNote": "Not (isteğe bağlı)",
+    "usePending": "Bekleyen girdileri istemlerde kullan",
+    "pending": "İnceleme bekleyen",
+    "approve": "{{name}} onayla",
+    "approveShort": "Onayla",
+    "reject": "{{name}} reddet",
+    "restore": "{{name}} geri yükle",
+    "restoreShort": "Geri yükle",
+    "rejected": "Reddedilenler ({{count}})",
+    "pendingCount": "{{count}} bekleyen girdi",
     "open": "Proje"
   },
   "providerDescriptions": {

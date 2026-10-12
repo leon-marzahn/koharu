@@ -26,7 +26,7 @@ pub use layers::{
 pub use provenance::{Authored, Generation, Origin};
 pub use spatial::{Geometry, Point, Visibility};
 pub use structure::{
-    Character, CharacterSheet, EntityOrigin, Page, PageDraft, Project, Relation, RelationKind,
-    Term, TermList,
+    Character, CharacterSheet, EntityOrigin, Page, PageDraft, Project, Proposals, Relation,
+    RelationKind, Term, TermList,
 };
 pub use text::{LanguageTag, SourceText, TextContent, TextRole, Translation};

@@ -61,6 +61,13 @@ const project: ProjectInfo = {
   can_redo: false,
   characters: [],
   terms: [],
+  proposals: {
+    characters: [],
+    terms: [],
+    rejected_characters: [],
+    rejected_terms: [],
+    use_in_prompts: false,
+  },
 }
 
 beforeEach(() => {

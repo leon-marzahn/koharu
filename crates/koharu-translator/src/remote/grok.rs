@@ -25,7 +25,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<crate::Translated> {
     let api_key = koharu_secrets::get("grok")?.context("grok API key is not configured")?;
     let response: Response = send_json(
         "grok",

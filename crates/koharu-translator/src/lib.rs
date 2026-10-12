@@ -16,7 +16,10 @@ use koharu_ml::Device;
 use error::{Error, Result};
 use local::LocalTranslator;
 
-pub use backend::{TranslationCharacter, TranslationContext, TranslationRequest, TranslationTerm};
+pub use backend::{
+    Translated, TranslationCharacter, TranslationContext, TranslationProposals, TranslationRequest,
+    TranslationTerm,
+};
 pub use language::Language;
 pub use model::{GenerationConfig, Model, ModelSelection, Quantization};
 pub(crate) use model::{ModelGeneration, QuantizationDefinition, display_name};
@@ -113,7 +116,7 @@ impl Translator {
         selection: &ModelSelection,
         generation: GenerationConfig,
         mut request: TranslationRequest,
-    ) -> anyhow::Result<(&'static str, Vec<String>)> {
+    ) -> anyhow::Result<(&'static str, Translated)> {
         let _metric = tracing::info_span!(
             target: "koharu_metrics",
             "translation_request",
@@ -125,7 +128,7 @@ impl Translator {
         let provider_id: &'static str = provider.into();
         if request.segments.is_empty() {
             tracing::Span::current().record("outcome", "skipped");
-            return Ok((provider_id, request.segments));
+            return Ok((provider_id, request.segments.into()));
         }
 
         let generation = generation.for_model(selection);
@@ -146,11 +149,11 @@ impl Translator {
             let providers = self.providers.read()?.clone();
             remote::translate(&self.client, &providers, selection, &generation, &request).await?
         };
-        if translated.len() != expected {
+        if translated.segments.len() != expected {
             return Err(Error::SegmentCount {
                 provider: provider_id,
                 expected,
-                actual: translated.len(),
+                actual: translated.segments.len(),
             }
             .into());
         }

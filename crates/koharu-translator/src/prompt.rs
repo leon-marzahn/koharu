@@ -6,7 +6,8 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Value, json};
 
 use crate::{
-    Language, TranslationCharacter, TranslationContext, TranslationRequest, TranslationTerm,
+    Language, Translated, TranslationCharacter, TranslationContext, TranslationProposals,
+    TranslationRequest, TranslationTerm,
 };
 
 pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, String)> {
@@ -16,6 +17,7 @@ pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, S
         context: &request.context,
         characters: &request.characters,
         terms: &request.terms,
+        known_sources: &request.known_sources,
         segments: request
             .segments
             .iter()
@@ -31,7 +33,7 @@ pub(crate) fn translations(
     provider: &str,
     text: &str,
     source_segments: &[String],
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<Translated> {
     let output = serde_json::from_str::<TranslationOutput>(text).with_context(|| {
         format!(
             "{provider} returned invalid translation JSON for {} segments; response was: {}",
@@ -49,7 +51,38 @@ pub(crate) fn translations(
         }
     }
 
-    Ok(translations)
+    Ok(Translated {
+        segments: translations,
+        proposals: proposals(&output.proposals),
+    })
+}
+
+/// Reads proposals entry by entry: proposals are a bonus, so anything malformed is dropped
+/// and never fails the translation.
+fn proposals(value: &Value) -> TranslationProposals {
+    fn entries<T: de::DeserializeOwned>(value: &Value, key: &str) -> Vec<T> {
+        value
+            .get(key)
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| serde_json::from_value(item.clone()).ok())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    let mut proposals = TranslationProposals {
+        characters: entries(value, "characters"),
+        terms: entries(value, "terms"),
+    };
+    proposals
+        .characters
+        .retain(|character: &TranslationCharacter| !character.source_name.trim().is_empty());
+    proposals
+        .terms
+        .retain(|term: &TranslationTerm| !term.source.trim().is_empty());
+    proposals
 }
 
 /// Keeps a model response readable in a log line without truncating so hard
@@ -109,9 +142,47 @@ pub(crate) fn output_schema(expected: usize) -> Value {
                     "required": ["id", "text"],
                     "additionalProperties": false
                 }
+            },
+            // Required in the schema because strict structured-output providers reject optional
+            // properties; the parser still accepts a missing or malformed `proposals`.
+            "proposals": {
+                "type": "object",
+                "description": "New recurring characters and terms worth adding to the project. Use empty arrays when there are none.",
+                "properties": {
+                    "characters": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source_name": { "type": "string" },
+                                "target_name": { "type": "string" },
+                                "speech_style": { "type": "string" },
+                                "appearance": { "type": "string" },
+                                "notes": { "type": "string" }
+                            },
+                            "required": ["source_name", "target_name", "speech_style", "appearance", "notes"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "terms": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source": { "type": "string" },
+                                "target": { "type": "string" },
+                                "note": { "type": "string" }
+                            },
+                            "required": ["source", "target", "note"],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": ["characters", "terms"],
+                "additionalProperties": false
             }
         },
-        "required": ["translations"],
+        "required": ["translations", "proposals"],
         "additionalProperties": false
     })
 }
@@ -179,6 +250,27 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         "}.trim_end());
     }
 
+    if request
+        .characters
+        .iter()
+        .any(|character| character.tentative)
+        || request.terms.iter().any(|term| term.tentative)
+    {
+        prompt.push_str("\n\n");
+        prompt.push_str(
+            "Entries with tentative set to true are unreviewed proposals; use them as hints, but they may be wrong.",
+        );
+    }
+
+    prompt.push_str("\n\n");
+    prompt.push_str(indoc! {"
+        Proposal requirements:
+        The `proposals` object may list new `characters` (source_name, target_name, speech_style, appearance, notes) and new `terms` (source, target, note).
+        Propose only names and terms that recur or will clearly recur, and only when their source is not already in the character sheet or term list.
+        Never propose a source listed in `known_sources`; those are pending or rejected.
+        Use empty arrays when there is nothing to propose. Proposals never replace the translations.
+    "}.trim_end());
+
     if request.image.is_some() {
         prompt.push_str("\n\n");
         prompt.push_str(indoc! {"
@@ -207,6 +299,8 @@ struct TranslationInput<'a> {
     context: &'a [TranslationContext],
     characters: &'a [TranslationCharacter],
     terms: &'a [TranslationTerm],
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    known_sources: &'a [String],
     segments: Vec<TranslationInputSegment<'a>>,
 }
 
@@ -219,6 +313,8 @@ struct TranslationInputSegment<'a> {
 #[derive(Debug, Deserialize)]
 struct TranslationOutput {
     translations: Vec<TranslationOutputSegment>,
+    #[serde(default)]
+    proposals: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -280,7 +376,7 @@ mod tests {
         let response = r#"{"translations":[{"id":0,"text":"hello"},{"id":1,"text":"world"}]}"#;
 
         assert_eq!(
-            translations("test", response, &source).unwrap(),
+            translations("test", response, &source).unwrap().segments,
             ["hello", "world"]
         );
     }
@@ -322,7 +418,7 @@ mod tests {
         let source = ["one".to_owned(), "two".to_owned()];
         let response = r#"{"translations":[{"id":1,"text":"world"},{"id":0,"text":"hello"}]}"#;
         assert_eq!(
-            translations("test", response, &source).unwrap(),
+            translations("test", response, &source).unwrap().segments,
             ["hello", "world"]
         );
     }
@@ -332,7 +428,7 @@ mod tests {
         let source = ["one".to_owned(), "two".to_owned()];
         let short = r#"{"translations":[{"id":1,"text":"world"}]}"#;
         assert_eq!(
-            translations("test", short, &source).unwrap(),
+            translations("test", short, &source).unwrap().segments,
             ["one", "world"]
         );
 
@@ -344,7 +440,7 @@ mod tests {
             "]}"
         );
         assert_eq!(
-            translations("test", response, &source).unwrap(),
+            translations("test", response, &source).unwrap().segments,
             ["hello", "two"]
         );
     }
@@ -369,6 +465,7 @@ mod tests {
             speech_style: "curt".into(),
             appearance: "tall".into(),
             notes: "rival".into(),
+            ..Default::default()
         };
         let request = TranslationRequest::new(["new"], Language::English)
             .with_characters([character("a"), character("b")]);
@@ -388,6 +485,7 @@ mod tests {
             source: source.into(),
             target: format!("{source}-t"),
             note: "title".into(),
+            ..Default::default()
         };
         let request =
             TranslationRequest::new(["new"], Language::English).with_terms([term("a"), term("b")]);
@@ -433,6 +531,80 @@ mod tests {
         assert_eq!(translations["items"]["properties"]["id"]["maximum"], 2);
         assert_eq!(translations["items"]["additionalProperties"], false);
         assert_eq!(schema["additionalProperties"], false);
+    }
+
+    #[test]
+    fn schema_accepts_proposals_next_to_translations() {
+        let schema = output_schema(1);
+        let proposals = &schema["properties"]["proposals"]["properties"];
+        assert_eq!(
+            proposals["characters"]["items"]["properties"]["source_name"]["type"],
+            "string"
+        );
+        assert_eq!(
+            proposals["terms"]["items"]["properties"]["note"]["type"],
+            "string"
+        );
+    }
+
+    #[test]
+    fn proposals_are_parsed_entry_by_entry() {
+        let source = ["one".to_owned()];
+        let response = r#"{"translations":[{"id":0,"text":"hello"}],"proposals":{
+            "characters":[{"source_name":"アリス","target_name":"Alice"},{"target_name":"no source"},"junk"],
+            "terms":[{"source":"魔王","target":"Demon King","note":"title"},{"source":"  "},{"source":5}]}}"#;
+        let translated = translations("test", response, &source).unwrap();
+        assert_eq!(translated.segments, ["hello"]);
+        assert_eq!(translated.proposals.characters.len(), 1);
+        assert_eq!(translated.proposals.characters[0].target_name, "Alice");
+        assert_eq!(translated.proposals.terms.len(), 1);
+        assert_eq!(translated.proposals.terms[0].source, "魔王");
+    }
+
+    #[test]
+    fn missing_empty_or_malformed_proposals_never_fail_the_translation() {
+        let source = ["one".to_owned()];
+        for proposals in [
+            "",
+            r#","proposals":null"#,
+            r#","proposals":{}"#,
+            r#","proposals":{"characters":[],"terms":[]}"#,
+            r#","proposals":"nonsense""#,
+            r#","proposals":[1,2]"#,
+            r#","proposals":{"characters":{"a":1},"terms":7}"#,
+        ] {
+            let response = format!(r#"{{"translations":[{{"id":0,"text":"hello"}}]{proposals}}}"#);
+            let translated = translations("test", &response, &source).unwrap();
+            assert_eq!(translated.segments, ["hello"], "{response}");
+            assert!(translated.proposals.characters.is_empty(), "{response}");
+            assert!(translated.proposals.terms.is_empty(), "{response}");
+        }
+    }
+
+    #[test]
+    fn tentative_entries_are_flagged_and_explained_only_when_present() {
+        let request = TranslationRequest::new(["new"], Language::English)
+            .with_characters([TranslationCharacter {
+                source_name: "a".into(),
+                tentative: true,
+                ..Default::default()
+            }])
+            .with_terms([TranslationTerm {
+                source: "b".into(),
+                ..Default::default()
+            }])
+            .with_known_sources(["x".to_owned()]);
+        let (system, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+        assert_eq!(input["characters"][0]["tentative"], true);
+        assert!(input["terms"][0].get("tentative").is_none());
+        assert_eq!(input["known_sources"][0], "x");
+        assert!(system.contains("tentative"));
+
+        let (system, user) = prompts(&TranslationRequest::new(["new"], Language::English)).unwrap();
+        assert!(!system.contains("tentative"));
+        assert!(!user.contains("known_sources"));
+        assert!(system.contains("Proposal requirements"));
     }
 
     #[test]

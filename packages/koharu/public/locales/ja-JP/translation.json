@@ -344,6 +344,15 @@
     "termSource": "原文",
     "termTarget": "訳語",
     "termNote": "メモ（任意）",
+    "usePending": "保留中の項目をプロンプトに使用",
+    "pending": "レビュー待ち",
+    "approve": "{{name}} を承認",
+    "approveShort": "承認",
+    "reject": "{{name}} を却下",
+    "restore": "{{name}} を復元",
+    "restoreShort": "復元",
+    "rejected": "却下済み（{{count}}）",
+    "pendingCount": "保留中 {{count}} 件",
     "open": "プロジェクト"
   },
   "providerDescriptions": {

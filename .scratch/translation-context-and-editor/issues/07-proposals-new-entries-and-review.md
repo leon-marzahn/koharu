@@ -4,12 +4,12 @@
 
 **Blocked by:** 05 Character sheet (manual), 06 Term list (manual)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Translation output schema accepts optional proposals; malformed or empty proposals never fail the translation
-- [ ] Proposals never apply themselves
-- [ ] Approve, edit and reject work; rejections are kept in a collapsed list and restorable
-- [ ] A rejected source is dropped from future proposals
-- [ ] Pending entries are excluded by default and sent as tentative when the setting is on
-- [ ] Badge shows pending count
-- [ ] Prompt-payload, stage and component tests cover the above
+- [x] Translation output schema accepts optional proposals; malformed or empty proposals never fail the translation
+- [x] Proposals never apply themselves
+- [x] Approve, edit and reject work; rejections are kept in a collapsed list and restorable
+- [x] A rejected source is dropped from future proposals
+- [x] Pending entries are excluded by default and sent as tentative when the setting is on
+- [x] Badge shows pending count
+- [x] Prompt-payload, stage and component tests cover the above

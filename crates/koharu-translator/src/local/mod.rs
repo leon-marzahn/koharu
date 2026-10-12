@@ -57,10 +57,10 @@ impl LocalTranslator {
         &self,
         request: TranslationRequest,
         generation: GenerationConfig,
-    ) -> Result<Vec<String>> {
+    ) -> Result<crate::Translated> {
         let expected = request.segments.len();
         if expected == 0 {
-            return Ok(Vec::new());
+            return Ok(Vec::new().into());
         }
         if !self
             .descriptor

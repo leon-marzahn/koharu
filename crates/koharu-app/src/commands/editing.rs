@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use koharu_desktop::{CanvasState, Desktop};
-use koharu_scene::{Character, EntityId, Term};
+use koharu_scene::{Character, EntityId, Proposals, Term};
 use serde::Deserialize;
 use specta::Type;
 use tauri::State;
@@ -185,6 +185,27 @@ pub(crate) async fn set_characters(
     let mut project = project.project.lock().await;
     let project = project.as_mut().context("no project is open")?;
     let commit = project.set_characters(characters).await?;
+    project.record_commit(&commit);
+    Ok(())
+}
+
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "proposals_reviewed",
+    skip_all,
+    fields(origin = "user", pending = proposals.characters.len() + proposals.terms.len()),
+)]
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_context(
+    characters: Vec<Character>,
+    terms: Vec<Term>,
+    proposals: Proposals,
+    project: State<'_, CurrentProject>,
+) -> Result<(), Error> {
+    let mut project = project.project.lock().await;
+    let project = project.as_mut().context("no project is open")?;
+    let commit = project.set_context(characters, terms, proposals).await?;
     project.record_commit(&commit);
     Ok(())
 }

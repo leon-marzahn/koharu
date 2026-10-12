@@ -4,8 +4,23 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ProjectPanel } from '@/components/editor/ProjectPanel'
+import { RightSidebar } from '@/components/editor/RightSidebar'
 import { projectKey, queryClient } from '@/lib/queries'
-import { commands, type Character, type ProjectInfo, type Term } from '@koharu/bridge/protocol'
+import {
+  commands,
+  type Character,
+  type ProjectInfo,
+  type Proposals,
+  type Term,
+} from '@koharu/bridge/protocol'
+
+const emptyProposals: Proposals = {
+  characters: [],
+  terms: [],
+  rejected_characters: [],
+  rejected_terms: [],
+  use_in_prompts: false,
+}
 
 const alice: Character = {
   source_name: 'アリス',
@@ -17,7 +32,12 @@ const alice: Character = {
 
 const demon: Term = { source: '魔王', target: 'Demon King', note: 'title' }
 
-function install(characters: Character[], terms: Term[] = []) {
+function install(
+  characters: Character[],
+  terms: Term[] = [],
+  proposals: Proposals = emptyProposals,
+  ui = <ProjectPanel />,
+) {
   const project: ProjectInfo = {
     name: 'Book',
     revision: 1,
@@ -26,14 +46,11 @@ function install(characters: Character[], terms: Term[] = []) {
     can_redo: false,
     characters,
     terms,
+    proposals,
   }
   queryClient.setQueryData(projectKey, project)
   vi.spyOn(commands, 'getProject').mockResolvedValue(project)
-  render(
-    <QueryClientProvider client={queryClient}>
-      <ProjectPanel />
-    </QueryClientProvider>,
-  )
+  render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 }
 
 describe('project panel', () => {
@@ -106,5 +123,116 @@ describe('project panel', () => {
     screen.getByRole('button', { name: 'Delete Demon King' }).focus()
     await user.keyboard('{Enter}')
     await waitFor(() => expect(setTerms).toHaveBeenLastCalledWith([]))
+  })
+
+  it('approves, edits and rejects pending entries with the keyboard alone', async () => {
+    const user = userEvent.setup()
+    const setContext = vi.spyOn(commands, 'setContext').mockResolvedValue(null)
+    const bob: Character = { ...alice, source_name: 'ボブ', target_name: 'Bob' }
+    const proposals = { ...emptyProposals, characters: [bob, { ...alice, source_name: 'カイ' }] }
+    install([alice], [], proposals)
+
+    expect(screen.getByRole('heading', { name: 'Pending review' })).toBeInTheDocument()
+    // Edit in place: commits the pending list only, nothing is approved.
+    const [, bobTarget] = screen.getAllByLabelText('Target name')
+    bobTarget.focus()
+    await user.keyboard('{Control>}a{/Control}Robert')
+    await user.tab()
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([alice], [], {
+        ...proposals,
+        characters: [{ ...bob, target_name: 'Robert' }, proposals.characters[1]],
+      }),
+    )
+
+    screen.getByRole('button', { name: 'Approve Bob' }).focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([alice, bob], [], {
+        ...proposals,
+        characters: [proposals.characters[1]],
+      }),
+    )
+
+    screen.getByRole('button', { name: 'Reject Bob' }).focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([alice], [], {
+        ...proposals,
+        characters: [proposals.characters[1]],
+        rejected_characters: ['ボブ'],
+      }),
+    )
+  })
+
+  it('rejects pending terms into a collapsed list and restores them', async () => {
+    const user = userEvent.setup()
+    const setContext = vi.spyOn(commands, 'setContext').mockResolvedValue(null)
+    const proposals = {
+      ...emptyProposals,
+      terms: [demon],
+      rejected_terms: ['勇者'],
+    }
+    install([], [], proposals)
+    await user.click(screen.getByRole('tab', { name: 'Term list' }))
+
+    const summary = screen.getByText('Rejected (1)')
+    const details = summary.closest('details')!
+    expect(details.open).toBe(false)
+    expect(screen.getByText('勇者')).not.toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Reject Demon King' }))
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([], [], {
+        ...proposals,
+        terms: [],
+        rejected_terms: ['勇者', '魔王'],
+      }),
+    )
+
+    await user.click(summary)
+    expect(screen.getByText('勇者')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Restore 勇者' }))
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([], [], { ...proposals, rejected_terms: [] }),
+    )
+  })
+
+  it('approves a pending term into the term list', async () => {
+    const user = userEvent.setup()
+    const setContext = vi.spyOn(commands, 'setContext').mockResolvedValue(null)
+    install([], [], { ...emptyProposals, terms: [demon] })
+    await user.click(screen.getByRole('tab', { name: 'Term list' }))
+    await user.click(screen.getByRole('button', { name: 'Approve Demon King' }))
+    await waitFor(() => expect(setContext).toHaveBeenLastCalledWith([], [demon], emptyProposals))
+  })
+
+  it('toggles using pending entries in prompts', async () => {
+    const user = userEvent.setup()
+    const setContext = vi.spyOn(commands, 'setContext').mockResolvedValue(null)
+    install([], [])
+    const toggle = screen.getByRole('checkbox', { name: 'Use pending entries in prompts' })
+    expect(toggle).not.toBeChecked()
+    await user.click(toggle)
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([], [], {
+        ...emptyProposals,
+        use_in_prompts: true,
+      }),
+    )
+  })
+
+  it('shows the pending count as a badge on the Project button', () => {
+    install(
+      [],
+      [],
+      { ...emptyProposals, characters: [alice], terms: [demon, demon] },
+      <RightSidebar />,
+    )
+    expect(screen.getByRole('button', { name: /3 pending entries/ })).toBeInTheDocument()
+  })
+
+  it('shows no badge when nothing is pending', () => {
+    install([], [], emptyProposals, <RightSidebar />)
+    expect(screen.queryByText(/pending entries$/)).not.toBeInTheDocument()
   })
 })
