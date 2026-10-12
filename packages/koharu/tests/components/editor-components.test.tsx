@@ -480,6 +480,46 @@ describe('greenfield editor', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('3 selected')
   })
 
+  it('marks stale pages and retranslates only on click', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const process = vi.spyOn(commands, 'process').mockResolvedValue(null as never)
+    const page = (id: string, stale: boolean) => ({
+      id,
+      label: id,
+      size: { width: 1000, height: 1500 },
+      source_asset: 'source',
+      layer_count: 1,
+      stale,
+    })
+    queryClient.setQueryData(pagesKey, [page('p1', false), page('p2', true), page('p3', true)])
+    render(<PageRail />)
+
+    // Marking is passive: nothing has run yet.
+    expect(process).not.toHaveBeenCalled()
+    expect(screen.getAllByText('Stale')).toHaveLength(2)
+
+    await user.click(screen.getByRole('button', { name: 'Retranslate 2 stale pages' }))
+    expect(process).toHaveBeenLastCalledWith(
+      { scope: 'pages', value: ['p2', 'p3'] },
+      { operation: 'only', stage: 'translation' },
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Retranslate all pages' }))
+    expect(process).toHaveBeenLastCalledWith(
+      { scope: 'project' },
+      { operation: 'only', stage: 'translation' },
+    )
+  })
+
+  it('hides the stale retranslate action when no page is stale', () => {
+    installProject()
+    render(<PageRail />)
+
+    expect(screen.queryByRole('button', { name: /stale pages/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retranslate all pages' })).toBeInTheDocument()
+  })
+
   it('loads page thumbnails into the filmstrip', async () => {
     installProject()
     const thumbnail = vi.spyOn(commands, 'getThumbnail').mockResolvedValue([1])
