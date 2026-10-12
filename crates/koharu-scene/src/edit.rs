@@ -769,7 +769,9 @@ impl Edit {
         let mut value = value.clone();
         match &self.generation {
             Some(generation) => {
-                if !value.set_origin(Origin::Generated(generation.clone())) {
+                if !value.set_origin(Origin::Generated(generation.clone()))
+                    && !T::SHARED_WITH_PIPELINE
+                {
                     return Err(Error::Authorship(format!(
                         "pipeline cannot write unmanaged component {}",
                         T::KIND
@@ -801,7 +803,8 @@ impl Edit {
         match existing {
             None => Ok(()),
             Some(value) => {
-                if self.generation.is_some() && value.origin().is_none() {
+                if self.generation.is_some() && value.origin().is_none() && !T::SHARED_WITH_PIPELINE
+                {
                     return Err(Error::Authorship(format!(
                         "pipeline cannot remove unmanaged component {}",
                         T::KIND

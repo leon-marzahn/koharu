@@ -1558,3 +1558,33 @@ async fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
         Err(Error::Authorship(_))
     ));
 }
+
+#[tokio::test]
+async fn pipeline_can_write_shared_proposals_but_not_other_project_data() {
+    let mut session = Session::memory().await.unwrap();
+    let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.translation").unwrap());
+    let mut edit = session.snapshot().edit_as(generation);
+
+    assert!(matches!(
+        edit.set_project(&CharacterSheet::default()),
+        Err(Error::Authorship(_))
+    ));
+    edit.set_project(&Proposals {
+        use_in_prompts: true,
+        ..Proposals::default()
+    })
+    .unwrap();
+    let snapshot = session
+        .commit(edit.finish().unwrap())
+        .await
+        .unwrap()
+        .snapshot;
+
+    assert!(
+        snapshot
+            .project_component::<Proposals>()
+            .unwrap()
+            .unwrap()
+            .use_in_prompts
+    );
+}

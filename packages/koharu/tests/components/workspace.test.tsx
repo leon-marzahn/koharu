@@ -337,6 +337,78 @@ describe('canvas interaction adapter', () => {
     )
   })
 
+  it('snaps a dragged box to the bubble center and can be dragged out again after reselecting', async () => {
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [
+        {
+          type: 'text',
+          id: 'element',
+          parent: 'page',
+          geometry: layer.geometry,
+          angle_degrees: 0,
+          visibility: { visible: true, opacity: 1 },
+          content: {
+            id: 'content',
+            source: { text: 'Source', language: 'en' },
+            translation: { text: 'Rendered', language: null },
+            role: null,
+            source_region: null,
+          },
+          typography: null,
+          layout: 'paragraph',
+          automatic_region: null,
+        },
+      ],
+      regions: [
+        {
+          id: 'bubble',
+          parent: 'page',
+          geometry: {
+            points: [
+              { x: 20, y: 30 },
+              { x: 100, y: 30 },
+              { x: 100, y: 90 },
+              { x: 20, y: 90 },
+            ],
+          },
+          kind: 'dev.koharu.region.bubble',
+          label: null,
+        },
+      ],
+    }))
+    useKoharuStore.setState({
+      layerFrames: { element: { x: 30, y: 40, width: 50, height: 20, angle_degrees: 0 } },
+    })
+    const commit = vi.spyOn(commands, 'commitTransform').mockResolvedValue(2)
+    const surface = renderWorkspace()
+
+    // Bubble center is (60, 60); the box center starts at (55, 50). Client = page + (10, 20).
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 20, clientX: 50, clientY: 70 })
+    fireEvent.pointerMove(surface, { pointerId: 20, clientX: 54, clientY: 79 })
+    fireEvent.pointerUp(surface, { pointerId: 20, clientX: 54, clientY: 79 })
+    await waitFor(() => expect(commit).toHaveBeenCalledOnce())
+    expect(canvas.updateTransform).toHaveBeenLastCalledWith([
+      { element: 'element', frame: expect.objectContaining({ x: 35, y: 50 }) },
+    ])
+
+    // Deselect, then grab the snapped box again and pull it well past the snap tolerance.
+    useKoharuStore.setState({
+      layerFrames: { element: { x: 35, y: 50, width: 50, height: 20, angle_degrees: 0 } },
+    })
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 21, clientX: 300, clientY: 300 })
+    fireEvent.pointerUp(surface, { pointerId: 21, clientX: 300, clientY: 300 })
+    expect(useKoharuStore.getState().selectedLayers).toEqual([])
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 22, clientX: 50, clientY: 80 })
+    fireEvent.pointerMove(surface, { pointerId: 22, clientX: 70, clientY: 80 })
+    fireEvent.pointerUp(surface, { pointerId: 22, clientX: 70, clientY: 80 })
+    await waitFor(() => expect(commit).toHaveBeenCalledTimes(2))
+    expect(canvas.updateTransform).toHaveBeenLastCalledWith([
+      { element: 'element', frame: expect.objectContaining({ x: 55, y: 50 }) },
+    ])
+  })
+
   it('resizes a selected layer through Koharu selection controls', async () => {
     installProject()
     useKoharuStore.setState({ selectedLayers: ['element'] })

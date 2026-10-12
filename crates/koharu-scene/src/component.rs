@@ -39,6 +39,11 @@ pub trait Component:
 {
     const KIND: &'static str;
 
+    /// Pipeline edits may write and remove this component even though it carries no origin.
+    /// Only for project data the user and the pipeline both append to; everything else stays
+    /// pipeline-read-only unless it records an origin.
+    const SHARED_WITH_PIPELINE: bool = false;
+
     fn record_refs(&self) -> Vec<EntityId> {
         Vec::new()
     }

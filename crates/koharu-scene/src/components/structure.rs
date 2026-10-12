@@ -134,6 +134,8 @@ pub struct Proposals {
 
 impl Component for Proposals {
     const KIND: &'static str = "dev.koharu.proposals";
+    // The translation stage appends proposals; the user approves and rejects them.
+    const SHARED_WITH_PIPELINE: bool = true;
 
     fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
         Ok(())
