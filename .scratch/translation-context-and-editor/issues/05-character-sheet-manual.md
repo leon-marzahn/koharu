@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Project panel opens with a Characters tab
-- [ ] Entries persist across restarts and are undoable
-- [ ] Every entry appears in every translation request
-- [ ] Controls are labelled and keyboard-operable
-- [ ] Prompt-payload, stage and component tests cover the above
+- [x] Project panel opens with a Characters tab
+- [x] Entries persist across restarts and are undoable
+- [x] Every entry appears in every translation request
+- [x] Controls are labelled and keyboard-operable
+- [x] Prompt-payload, stage and component tests cover the above

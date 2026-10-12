@@ -34,7 +34,7 @@ pub(crate) fn translations(
     text: &str,
     source_segments: &[String],
 ) -> anyhow::Result<Translated> {
-    let output = serde_json::from_str::<TranslationOutput>(text).with_context(|| {
+    let output = parse_output(text).with_context(|| {
         format!(
             "{provider} returned invalid translation JSON for {} segments; response was: {}",
             source_segments.len(),
@@ -350,6 +350,38 @@ struct TranslationInputSegment<'a> {
     text: &'a str,
 }
 
+/// Strict parse first. Models sometimes emit a stray bracket after a valid `translations`
+/// array, so on failure salvage each top-level field on its own: the translations must
+/// survive, and proposals are a bonus that may be lost.
+fn parse_output(text: &str) -> serde_json::Result<TranslationOutput> {
+    let error = match serde_json::from_str::<TranslationOutput>(text) {
+        Ok(output) => return Ok(output),
+        Err(error) => error,
+    };
+    // Wrapped output (code fences, prose) stays rejected; only a bare object is salvaged.
+    let trimmed = text.trim();
+    if !(trimmed.starts_with('{') && trimmed.ends_with('}')) {
+        return Err(error);
+    }
+    // ponytail: finds the first `"key":` textually, so a segment containing `"translations":`
+    // could confuse it; upgrade to a lenient JSON parser if that ever shows up.
+    fn first_value<T: de::DeserializeOwned>(text: &str, key: &str) -> Option<T> {
+        let after = &text[text.find(&format!("\"{key}\""))? + key.len() + 2..];
+        let rest = after.trim_start().strip_prefix(':')?;
+        serde_json::Deserializer::from_str(rest)
+            .into_iter::<T>()
+            .next()?
+            .ok()
+    }
+    match first_value(text, "translations") {
+        Some(translations) => Ok(TranslationOutput {
+            translations,
+            proposals: first_value(text, "proposals").unwrap_or(Value::Null),
+        }),
+        None => Err(error),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct TranslationOutput {
     translations: Vec<TranslationOutputSegment>,
@@ -630,6 +662,23 @@ mod tests {
             updates["term_updates"]["items"]["properties"]["note"]["type"][1],
             "null"
         );
+    }
+
+    #[test]
+    fn a_stray_bracket_after_translations_keeps_translations_and_proposals() {
+        // Real model output: one `]` too many closes the object early.
+        let text = r#"{"translations":[{"id":0,"text":"Hi"},{"id":1,"text":"Umm..."}]],"proposals":{"characters":[],"terms":[{"source":"A","target":"B","note":""}],"character_updates":[],"term_updates":[]}}"#;
+        let source = vec!["a".to_owned(), "b".to_owned()];
+
+        let translated = translations("test", text, &source).unwrap();
+
+        assert_eq!(translated.segments, ["Hi", "Umm..."]);
+        assert_eq!(translated.proposals.terms.len(), 1);
+    }
+
+    #[test]
+    fn output_without_translations_still_fails() {
+        assert!(translations("test", r#"{"proposals":{}}"#, &["a".to_owned()]).is_err());
     }
 
     #[test]

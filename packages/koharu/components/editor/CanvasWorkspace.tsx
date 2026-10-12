@@ -15,6 +15,7 @@ import { expandLayerSelection, isTextLayer } from '@/lib/document'
 import {
   controlFrame,
   draftFrame,
+  BUBBLE_REGION,
   hitTestLayers,
   pagePoint,
   physicalPoint,
@@ -462,6 +463,46 @@ export function CanvasWorkspace() {
     return () => window.removeEventListener('keydown', down)
   })
 
+  // Cmd/Ctrl+Up/Down step the selected boxes' font size by 1 (Shift: 10); plain arrows nudge.
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      const dir = event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0
+      const target = event.target
+      if (
+        !dir ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      )
+        return
+      const ids = expandLayerSelection(page?.layers ?? [], useKoharuStore.getState().selectedLayers)
+      const updates = (page?.layers ?? []).flatMap((layer) =>
+        isTextLayer(layer) && ids.includes(layer.id) && layer.typography?.size != null
+          ? [
+              {
+                layer: layer.id,
+                typography: {
+                  ...layer.typography,
+                  size: Math.min(300, Math.max(1, layer.typography.size + dir * (event.shiftKey ? 10 : 1))),
+                  auto_fit: false,
+                },
+              },
+            ]
+          : [],
+      )
+      if (!updates.length) return
+      event.preventDefault()
+      void call(commands.setTypography, updates)
+        .then(() => refresh(projectKey, pagesKey, pageKey))
+        .catch(() => undefined)
+    }
+    window.addEventListener('keydown', down)
+    return () => window.removeEventListener('keydown', down)
+  })
+
   // Cmd/Ctrl+C/V copy boxes; adding Shift copies style. Text fields keep native copy/paste.
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -538,7 +579,7 @@ export function CanvasWorkspace() {
         page.layers.some((layer) => layer.id === element && isTextLayer(layer)),
       )
       const bubbles = page.regions
-        .filter((region) => region.kind === 'bubble' && region.geometry.points.length)
+        .filter((region) => region.kind === BUBBLE_REGION && region.geometry.points.length)
         .map(({ geometry }) => {
           const xs = geometry.points.map((p) => p.x)
           const ys = geometry.points.map((p) => p.y)

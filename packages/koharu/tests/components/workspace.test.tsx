@@ -410,7 +410,7 @@ describe('canvas interaction adapter', () => {
               { x: 20, y: 90 },
             ],
           },
-          kind: 'bubble',
+          kind: 'dev.koharu.region.bubble',
           label: null,
         },
       ],
@@ -554,6 +554,32 @@ describe('canvas interaction adapter', () => {
       expect(commit).toHaveBeenCalledOnce()
       expect(commit).toHaveBeenCalledWith(1, [
         { element: 'element', frame: { x: 32, y: 50, width: 50, height: 20, angle_degrees: 0 } },
+      ])
+    })
+
+    it('Cmd+Up/Down step the font size by 1, Shift by 10, and plain arrows do not', async () => {
+      installText()
+      queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+        ...page,
+        layers: page.layers.map((value) => ({
+          ...value,
+          typography: { size: 20, auto_fit: true },
+        })),
+      }))
+      const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
+      setTypography.mockClear()
+      renderWorkspace()
+
+      fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true })
+      fireEvent.keyDown(window, { key: 'ArrowDown', ctrlKey: true, shiftKey: true })
+      fireEvent.keyDown(window, { key: 'ArrowUp' })
+
+      expect(setTypography).toHaveBeenCalledTimes(2)
+      expect(setTypography).toHaveBeenNthCalledWith(1, [
+        { layer: 'element', typography: { size: 21, auto_fit: false } },
+      ])
+      expect(setTypography).toHaveBeenNthCalledWith(2, [
+        { layer: 'element', typography: { size: 10, auto_fit: false } },
       ])
     })
 

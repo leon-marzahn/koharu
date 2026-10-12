@@ -5,6 +5,7 @@ import { useState, type PointerEvent as ReactPointerEvent, type RefObject } from
 import { SelectionControls } from '@/components/editor/SelectionControls'
 import { call } from '@/lib/backend'
 import { cssFrame, pagePoint, type Camera } from '@/lib/geometry'
+import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
 import { commands, type AnalysisRegion, type EntityId, type Frame } from '@koharu/bridge/protocol'
 
 // Detection regions are edited as their axis-aligned bounds (angle 0 until rotated).
@@ -54,10 +55,14 @@ export function RegionsOverlay({
   const [drag, setDrag] = useState<Drag | null>(null)
   const region = regions.find((r) => r.id === selected)
 
+  // Keep the preview until the refreshed page arrives, otherwise the region snaps back to
+  // its stale geometry while the attached text has already moved.
   const commit = (frame: Frame | null) => {
-    setPreview(null)
-    if (!region || !frame) return
+    if (!region || !frame) return setPreview(null)
     void call(commands.setRegionGeometry, [{ layer: region.id, points: framePoints(frame) }])
+      .then(() => refresh(projectKey, pagesKey, pageKey))
+      .catch(() => undefined)
+      .finally(() => setPreview(null))
   }
 
   const point = (event: ReactPointerEvent) => {

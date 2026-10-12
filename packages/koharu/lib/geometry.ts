@@ -257,6 +257,8 @@ export interface SnapGuide {
   bubble: Bounds
 }
 
+// Region kind the backend reports for speech bubbles.
+export const BUBBLE_REGION = 'dev.koharu.region.bubble'
 const snapToleranceScreenPx = 8
 
 // Snaps the moved boxes' shared center to the center of the bubble containing it, per axis.
