@@ -39,6 +39,7 @@ const preferences: Preferences = {
       generation: { vision: true, reasoning: true },
       target_language: 'en-US',
       instructions: null,
+      previous_pages: 2,
     },
     inpainting: { model: 'lama' },
     processor: {},
