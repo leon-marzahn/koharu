@@ -178,8 +178,14 @@ pub struct TranslationConfig {
     #[specta(type = String)]
     pub target_language: Language,
     pub instructions: Option<String>,
-    /// How many earlier translated pages to send as continuity hints.
+    /// How many earlier translated pages to send as continuity hints. Defaulted on load so
+    /// configs saved before this field existed keep working.
+    #[serde(default = "default_previous_pages")]
     pub previous_pages: u32,
+}
+
+const fn default_previous_pages() -> u32 {
+    2
 }
 
 impl Default for TranslationConfig {
@@ -189,7 +195,7 @@ impl Default for TranslationConfig {
             generation: GenerationConfig::default(),
             target_language: Language::English,
             instructions: None,
-            previous_pages: 2,
+            previous_pages: default_previous_pages(),
         }
     }
 }
@@ -305,6 +311,20 @@ mod tests {
         ));
         assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6));
         assert!(matches!(config.inpainting, InpaintingModel::LaMa {}));
+    }
+
+    #[test]
+    fn configs_saved_before_previous_pages_existed_still_load() {
+        let saved = toml::to_string(&PipelineConfig::default()).unwrap();
+        let old = saved
+            .lines()
+            .filter(|line| !line.starts_with("previous_pages"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!old.contains("previous_pages"));
+
+        let config: PipelineConfig = toml::from_str(&old).unwrap();
+        assert_eq!(config.translation.previous_pages, 2);
     }
 
     #[test]

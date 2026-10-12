@@ -166,7 +166,7 @@ export function TranslationPreferences({
         >
           <NumberField
             label={t('settings.translation.previousPages')}
-            value={value.previous_pages}
+            value={value.previous_pages ?? 2}
             min={0}
             max={10}
             step={1}
