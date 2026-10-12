@@ -840,6 +840,39 @@ describe('greenfield editor', () => {
     expect(screen.queryByTestId('center-mark')).not.toBeInTheDocument()
   })
 
+  it('draws the snap guide in the DOM overlay only while a snap is active', () => {
+    installProject()
+    const page = queryClient.getQueryData(pageKey) as Parameters<typeof CanvasOverlay>[0]['page']
+    const props = {
+      page,
+      camera: { zoom: 1, translation: [0, 0] as [number, number], fitted: false },
+      selected: [],
+      hovered: null,
+      frames: useKoharuStore.getState().layerFrames,
+      previews: {},
+      draft: null,
+      cursor: null,
+      brushSize: 10,
+      showBrushCursor: false,
+      onTransformStart: vi.fn(),
+      onTransformFrame: vi.fn(),
+      onTransformEnd: vi.fn(),
+    }
+    const bubble = { x: 0, y: 0, width: 40, height: 20 }
+    const { rerender } = render(<CanvasOverlay {...props} snapGuide={null} />)
+    expect(screen.queryByTestId('snap-guide-x')).not.toBeInTheDocument()
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CanvasOverlay {...props} snapGuide={{ x: 20, bubble }} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByTestId('canvas-overlay')).toContainElement(
+      screen.getByTestId('snap-guide-x'),
+    )
+    expect(screen.queryByTestId('snap-guide-y')).not.toBeInTheDocument()
+  })
+
   it('toggles the regions overlay and commits a resized region', async () => {
     const user = userEvent.setup()
     installProject()

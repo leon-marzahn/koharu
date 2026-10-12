@@ -6,7 +6,13 @@ import { useMemo, useRef } from 'react'
 import { RegionsOverlay } from '@/components/editor/RegionsOverlay'
 import { SelectionControls } from '@/components/editor/SelectionControls'
 import { effectiveLayerVisibility, expandLayerSelection, isTextLayer } from '@/lib/document'
-import { controlFrame, cssFrame, selectableLayer, type Camera } from '@/lib/geometry'
+import {
+  controlFrame,
+  cssFrame,
+  selectableLayer,
+  type Camera,
+  type SnapGuide,
+} from '@/lib/geometry'
 import { useKoharuStore } from '@/lib/store'
 import type {
   EntityId,
@@ -25,6 +31,7 @@ interface CanvasOverlayProps {
   frames: Readonly<Record<EntityId, Frame>>
   previews: Readonly<Record<EntityId, Frame>>
   draft: Frame | null
+  snapGuide?: SnapGuide | null
   cursor: Point | null
   brushSize: number
   showBrushCursor: boolean
@@ -41,6 +48,7 @@ export function CanvasOverlay({
   frames,
   previews,
   draft,
+  snapGuide,
   cursor,
   brushSize,
   showBrushCursor,
@@ -118,6 +126,7 @@ export function CanvasOverlay({
 
       {showRegions && <RegionsOverlay regions={page.regions} camera={camera} container={root} />}
       {draft && <DraftOverlay frame={draft} camera={camera} />}
+      {snapGuide && <SnapGuideLines guide={snapGuide} camera={camera} />}
       {showBrushCursor && cursor && (
         <div
           className='absolute rounded-full border border-white/95 shadow-[0_0_0_1px_rgb(0_0_0/0.9),0_1px_3px_rgb(0_0_0/0.45)]'
@@ -160,6 +169,32 @@ function CenterMark({ frame, camera }: { frame: Frame; camera: Camera }) {
       className='absolute size-3 -translate-x-1/2 -translate-y-1/2 text-[var(--canvas-selection)] opacity-50'
       style={{ left: left + width / 2, top: top + height / 2 }}
     />
+  )
+}
+
+// Overlay-only faint line(s) through the bubble center while a drag is snapped.
+function SnapGuideLines({ guide, camera }: { guide: SnapGuide; camera: Camera }) {
+  const { left, top, width, height } = cssFrame({ ...guide.bubble, angle_degrees: 0 }, camera)
+  const line = 'pointer-events-none absolute bg-[var(--canvas-selection)] opacity-40'
+  return (
+    <>
+      {guide.x !== undefined && (
+        <div
+          data-testid='snap-guide-x'
+          aria-hidden='true'
+          className={line}
+          style={{ left: left + width / 2, top, width: 1, height }}
+        />
+      )}
+      {guide.y !== undefined && (
+        <div
+          data-testid='snap-guide-y'
+          aria-hidden='true'
+          className={line}
+          style={{ left, top: top + height / 2, width, height: 1 }}
+        />
+      )}
+    </>
   )
 }
 

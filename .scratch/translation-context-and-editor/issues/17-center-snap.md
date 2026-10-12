@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Snap triggers within 8 screen px at any zoom
-- [ ] Guide shows while snapped
-- [ ] Cmd held disables snapping
-- [ ] Boxes outside any bubble never snap
-- [ ] Component tests cover threshold and override
+- [x] Snap triggers within 8 screen px at any zoom
+- [x] Guide shows while snapped
+- [x] Cmd held disables snapping
+- [x] Boxes outside any bubble never snap
+- [x] Component tests cover threshold and override

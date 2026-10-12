@@ -1,4 +1,4 @@
-import type { EntityId, Frame, Layer, Point, TransformFrame } from '@koharu/bridge/protocol'
+import type { Bounds, EntityId, Frame, Layer, Point, TransformFrame } from '@koharu/bridge/protocol'
 
 import { effectiveLayerVisibility, isTextLayer } from './document'
 
@@ -249,6 +249,47 @@ export function translateFrames(originals: TransformFrame[], delta: Point): Tran
     element,
     frame: { ...frame, x: frame.x + delta.x, y: frame.y + delta.y },
   }))
+}
+
+export interface SnapGuide {
+  x?: number
+  y?: number
+  bubble: Bounds
+}
+
+const snapToleranceScreenPx = 8
+
+// Snaps the moved boxes' shared center to the center of the bubble containing it, per axis.
+// Tolerance is in screen px, so it is divided by zoom. Only the bubble center is a target.
+// ponytail: multiple boxes snap as one group (union center); add per-box snapping if needed.
+export function snapMoveToBubble(
+  originals: Frame[],
+  delta: Point,
+  bubbles: Bounds[],
+  { zoom, disabled = false }: { zoom: number; disabled?: boolean },
+): { delta: Point; guide: SnapGuide | null } {
+  if (disabled || !originals.length) return { delta, guide: null }
+  const left = Math.min(...originals.map((f) => f.x))
+  const top = Math.min(...originals.map((f) => f.y))
+  const right = Math.max(...originals.map((f) => f.x + f.width))
+  const bottom = Math.max(...originals.map((f) => f.y + f.height))
+  const center = { x: (left + right) / 2 + delta.x, y: (top + bottom) / 2 + delta.y }
+  const bubble = bubbles.find(
+    (b) =>
+      center.x >= b.x && center.x <= b.x + b.width && center.y >= b.y && center.y <= b.y + b.height,
+  )
+  if (!bubble) return { delta, guide: null }
+  const tolerance = snapToleranceScreenPx / zoom
+  const target = { x: bubble.x + bubble.width / 2, y: bubble.y + bubble.height / 2 }
+  const guide: SnapGuide = { bubble }
+  const snapped = { ...delta }
+  for (const axis of ['x', 'y'] as const) {
+    if (Math.abs(center[axis] - target[axis]) <= tolerance) {
+      snapped[axis] += target[axis] - center[axis]
+      guide[axis] = target[axis]
+    }
+  }
+  return { delta: snapped, guide: guide.x === undefined && guide.y === undefined ? null : guide }
 }
 
 function finite(...values: number[]): boolean {

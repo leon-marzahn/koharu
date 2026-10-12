@@ -11,7 +11,7 @@ import { ToolBar } from '@/components/editor/ToolBar'
 import { useCanvas } from '@/components/editor/useCanvas'
 import { call } from '@/lib/backend'
 import { copyBoxes, copyStyle, pasteBoxes, pasteStyle } from '@/lib/clipboard'
-import { expandLayerSelection } from '@/lib/document'
+import { expandLayerSelection, isTextLayer } from '@/lib/document'
 import {
   controlFrame,
   draftFrame,
@@ -19,7 +19,9 @@ import {
   pagePoint,
   physicalPoint,
   selectableLayer,
+  snapMoveToBubble,
   translateFrames,
+  type SnapGuide,
 } from '@/lib/geometry'
 import {
   pageKey,
@@ -95,6 +97,7 @@ export function CanvasWorkspace() {
   const commandQueue = useRef<Promise<void>>(Promise.resolve())
   const [previews, setPreviews] = useState<Record<string, Frame>>({})
   const [draft, setDraft] = useState<Frame | null>(null)
+  const [snapGuide, setSnapGuide] = useState<SnapGuide | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const [cursor, setCursor] = useState<Point | null>(null)
   const colorSampling = useColorSampling()
@@ -489,7 +492,7 @@ export function CanvasWorkspace() {
 
   const moveGesture = (
     pointer: number,
-    samples: ReadonlyArray<{ clientX: number; clientY: number }>,
+    samples: ReadonlyArray<{ clientX: number; clientY: number; metaKey?: boolean }>,
   ) => {
     const current = gesture.current
     const sample = samples.at(-1)
@@ -529,12 +532,27 @@ export function CanvasWorkspace() {
     const points = samples.map((value) => clientPagePoint(value.clientX, value.clientY))
     const point = points.at(-1)!
     if (current.kind === 'move') {
-      updateTransform(
-        translateFrames(current.originals, {
-          x: point.x - current.start.x,
-          y: point.y - current.start.y,
-        }),
+      const raw = { x: point.x - current.start.x, y: point.y - current.start.y }
+      // Only text boxes snap; Cmd (not Alt, which the canvas uses) disables it.
+      const textOnly = current.originals.every(({ element }) =>
+        page.layers.some((layer) => layer.id === element && isTextLayer(layer)),
       )
+      const bubbles = page.regions
+        .filter((region) => region.kind === 'bubble' && region.geometry.points.length)
+        .map(({ geometry }) => {
+          const xs = geometry.points.map((p) => p.x)
+          const ys = geometry.points.map((p) => p.y)
+          const [x, y] = [Math.min(...xs), Math.min(...ys)]
+          return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
+        })
+      const snap = snapMoveToBubble(
+        current.originals.map(({ frame }) => frame),
+        raw,
+        textOnly ? bubbles : [],
+        { zoom: camera.zoom, disabled: Boolean(sample.metaKey) },
+      )
+      setSnapGuide(snap.guide)
+      updateTransform(translateFrames(current.originals, snap.delta))
     } else if (current.kind === 'text') {
       current.frame = draftFrame(current.start, point)
       setDraft(current.frame)
@@ -549,6 +567,7 @@ export function CanvasWorkspace() {
     gesture.current = null
     if (!current || !page) return
     if (current.kind === 'move') {
+      setSnapGuide(null)
       finishTransform()
     } else if (current.kind === 'text') {
       const pointText =
@@ -839,6 +858,7 @@ export function CanvasWorkspace() {
               frames={layerFrames}
               previews={previews}
               draft={draft}
+              snapGuide={snapGuide}
               cursor={cursor}
               brushSize={brush.diameter}
               showBrushCursor={isBrushTool(tool)}
