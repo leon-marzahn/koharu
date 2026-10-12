@@ -1588,3 +1588,30 @@ async fn pipeline_can_write_shared_proposals_but_not_other_project_data() {
             .use_in_prompts
     );
 }
+
+#[tokio::test]
+async fn pipeline_can_set_and_clear_the_stale_marker() {
+    let mut session = Session::memory().await.unwrap();
+    let mut page_id = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let id = edit.add_page(page(), At::End)?;
+            page_id = Some(id);
+            edit.set(id, &StalePage {})
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    let page_id = page_id.unwrap();
+    assert!(snapshot.component::<StalePage>(page_id).unwrap().is_some());
+
+    let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.translation").unwrap());
+    let mut edit = snapshot.edit_as(generation);
+    edit.remove::<StalePage>(page_id).unwrap();
+    let snapshot = session
+        .commit(edit.finish().unwrap())
+        .await
+        .unwrap()
+        .snapshot;
+    assert!(snapshot.component::<StalePage>(page_id).unwrap().is_none());
+}

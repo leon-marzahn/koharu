@@ -8,7 +8,7 @@ use koharu_scene::{
     EntityId, EntityOrigin, FIT_SCALE, FitsTo, FlowsIn, Geometry as SceneGeometry,
     Group as SceneGroup, Origin, PageDraft, Point as ScenePoint, Presents, Proposals,
     RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion, RemovePolicy,
-    Revision, Session, Snapshot, SourceText as SceneSourceText, Term, TermList,
+    Revision, Session, Snapshot, SourceText as SceneSourceText, StalePage, Term, TermList,
     TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
     Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
@@ -58,6 +58,8 @@ pub struct PageSummary {
     pub source_asset: Option<String>,
     #[specta(type = f64)]
     pub layer_count: usize,
+    /// Translation predates a sheet/term edit; cleared when the page is retranslated.
+    pub stale: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -358,7 +360,9 @@ impl Project {
         terms: Vec<Term>,
         proposals: Proposals,
     ) -> Result<Commit> {
-        let patch = self.snapshot().patch(|edit| {
+        let snapshot = self.snapshot();
+        let patch = snapshot.patch(|edit| {
+            mark_stale(&snapshot, edit, Some(&characters), Some(&terms))?;
             edit.set_project(&CharacterSheet { characters })?;
             edit.set_project(&TermList { terms })?;
             edit.set_project(&proposals)
@@ -367,16 +371,20 @@ impl Project {
     }
 
     pub(crate) async fn set_characters(&mut self, characters: Vec<Character>) -> Result<Commit> {
-        let patch = self
-            .snapshot()
-            .patch(|edit| edit.set_project(&CharacterSheet { characters }))?;
+        let snapshot = self.snapshot();
+        let patch = snapshot.patch(|edit| {
+            mark_stale(&snapshot, edit, Some(&characters), None)?;
+            edit.set_project(&CharacterSheet { characters })
+        })?;
         self.commit(patch).await
     }
 
     pub(crate) async fn set_terms(&mut self, terms: Vec<Term>) -> Result<Commit> {
-        let patch = self
-            .snapshot()
-            .patch(|edit| edit.set_project(&TermList { terms }))?;
+        let snapshot = self.snapshot();
+        let patch = snapshot.patch(|edit| {
+            mark_stale(&snapshot, edit, None, Some(&terms))?;
+            edit.set_project(&TermList { terms })
+        })?;
         self.commit(patch).await
     }
 
@@ -403,6 +411,7 @@ impl Project {
                     },
                     source_asset,
                     layer_count,
+                    stale: snapshot.component::<StalePage>(page.id())?.is_some(),
                 })
             })
             .collect()
@@ -1350,6 +1359,61 @@ impl Project {
     }
 }
 
+/// Marks pages stale when an entry changed: any entry present in only one of old/new
+/// contributes its source string (old and new, so renames mark both), and a page is
+/// stale when its source text contains one. Style/appearance/notes edits fall out of
+/// the same rule because the entry differs but its source name is what is matched.
+fn mark_stale(
+    snapshot: &Snapshot,
+    edit: &mut koharu_scene::Edit,
+    characters: Option<&[Character]>,
+    terms: Option<&[Term]>,
+) -> koharu_scene::Result<()> {
+    fn changed<'a, T: PartialEq>(
+        old: &'a [T],
+        new: &'a [T],
+        source: impl Fn(&'a T) -> &'a str,
+    ) -> impl Iterator<Item = &'a str> {
+        let only_old = old.iter().filter(|entry| !new.contains(entry));
+        let only_new = new.iter().filter(|entry| !old.contains(entry));
+        only_old.chain(only_new).map(source)
+    }
+    let old_characters = snapshot
+        .project_component::<CharacterSheet>()?
+        .unwrap_or_default()
+        .characters;
+    let old_terms = snapshot
+        .project_component::<TermList>()?
+        .unwrap_or_default()
+        .terms;
+    let mut sources = Vec::new();
+    if let Some(new) = characters {
+        sources.extend(changed(&old_characters, new, |c| &c.source_name));
+    }
+    if let Some(new) = terms {
+        sources.extend(changed(&old_terms, new, |t| &t.source));
+    }
+    sources.retain(|source| !source.trim().is_empty());
+    if sources.is_empty() {
+        return Ok(());
+    }
+    for page in snapshot.pages() {
+        let mut text = String::new();
+        if let Some(group) = page.text_group()? {
+            for layer in group.text_layers()? {
+                if let Some(source) = layer.content()?.source()? {
+                    text.push_str(&source.text.value);
+                    text.push('\n');
+                }
+            }
+        }
+        if sources.iter().any(|source| text.contains(source)) {
+            edit.set(page.id(), &StalePage {})?;
+        }
+    }
+    Ok(())
+}
+
 fn validate_project_name(name: &str) -> Result<String> {
     let name = name.trim();
     if name.is_empty() {
@@ -1607,6 +1671,86 @@ mod tests {
         assert!(project.info().terms.is_empty());
         project.redo().await.unwrap();
         assert_eq!(project.info().terms.len(), 1);
+    }
+
+    async fn page_with_source(project: &mut Project, label: &str, source: &str) -> EntityId {
+        let mut edit = project.snapshot().edit();
+        let page = edit
+            .add_page(PageDraft::new(label, 100.0, 100.0), At::End)
+            .unwrap();
+        project
+            .session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap();
+        let (_, layer) = project
+            .add_point_text(page, Point { x: 1.0, y: 1.0 })
+            .await
+            .unwrap();
+        project
+            .set_source_text(layer, source.to_owned())
+            .await
+            .unwrap();
+        page
+    }
+
+    fn stale(project: &Project) -> Vec<String> {
+        Project::pages(&project.snapshot())
+            .unwrap()
+            .into_iter()
+            .filter(|page| page.stale)
+            .map(|page| page.label)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn editing_entries_marks_pages_containing_old_or_new_source_stale() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        page_with_source(&mut project, "old", "魔王が来た").await;
+        page_with_source(&mut project, "new", "王様が来た").await;
+        page_with_source(&mut project, "none", "何もない").await;
+        let term = Term {
+            source: "魔王".into(),
+            target: "Demon King".into(),
+            note: String::new(),
+        };
+        project.set_terms(vec![term.clone()]).await.unwrap();
+        assert_eq!(stale(&project), ["old"]);
+
+        // Renaming the source marks pages with the old and the new string.
+        let renamed = Term {
+            source: "王様".into(),
+            ..term.clone()
+        };
+        project.set_terms(vec![renamed.clone()]).await.unwrap();
+        assert_eq!(stale(&project), ["old", "new"]);
+
+        // Unchanged entries mark nothing.
+        let mut fresh = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        page_with_source(&mut fresh, "p", "魔王").await;
+        fresh.set_terms(vec![term.clone()]).await.unwrap();
+        fresh.set_terms(vec![term]).await.unwrap();
+        assert_eq!(stale(&fresh), ["p"]);
+    }
+
+    #[tokio::test]
+    async fn character_style_edits_mark_pages_with_the_source_name() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        page_with_source(&mut project, "alice", "アリスです").await;
+        page_with_source(&mut project, "other", "ボブです").await;
+        let alice = Character {
+            source_name: "アリス".into(),
+            target_name: "Alice".into(),
+            ..Character::default()
+        };
+        project.set_characters(vec![alice.clone()]).await.unwrap();
+        assert_eq!(stale(&project), ["alice"]);
+        let patched = Character {
+            speech_style: "curt".into(),
+            ..alice
+        };
+        project.set_characters(vec![patched]).await.unwrap();
+        assert_eq!(stale(&project), ["alice"]);
     }
 
     #[tokio::test]

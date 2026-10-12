@@ -1,8 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{
-    Authored, CharacterSheet, CharacterUpdate, EntityId, LanguageTag, Origin, Proposals, Snapshot,
-    SourceText, TermList, TermUpdate, Translation,
+    Authored, CharacterSheet, CharacterUpdate, EntityId, Generation, LanguageTag, Origin,
+    Proposals, Snapshot, SourceText, StalePage, TermList, TermUpdate, Translation,
 };
 use koharu_translator::{
     TranslationCharacter, TranslationCharacterUpdate, TranslationContext, TranslationProposals,
@@ -349,29 +349,54 @@ impl StageProcessor for Processor {
         if let Some(merged) = merge_proposals(&input.scene, translated.proposals)? {
             edit.set_project(&merged)?;
         }
-        for ((entity, source), text) in targets.into_iter().zip(translated.segments) {
-            if input
-                .scene
-                .component::<Translation>(entity)?
-                .is_some_and(|value| matches!(value.text.origin, Origin::User))
-            {
-                continue;
-            }
-            let text = if source.trim() == "\u{2026}" {
-                "\u{2026}".to_owned()
-            } else {
-                text
-            };
-            edit.set(
-                entity,
-                &Translation {
-                    text: Authored::generated(text, generated.clone()),
-                    language: Some(language.clone()),
-                },
-            )?;
-        }
+        write_translations(
+            &input.scene,
+            &mut edit,
+            input.page,
+            targets,
+            translated.segments,
+            &language,
+            &generated,
+        )?;
         finish(edit)
     }
+}
+
+/// Writes generated translations, keeping hand-edited ones, and clears the page's stale
+/// marker: the page is now translated against the current sheet and term list.
+fn write_translations(
+    scene: &Snapshot,
+    edit: &mut koharu_scene::Edit,
+    page: EntityId,
+    targets: Vec<(EntityId, String)>,
+    segments: Vec<String>,
+    language: &LanguageTag,
+    generated: &Generation,
+) -> Result<()> {
+    for ((entity, source), text) in targets.into_iter().zip(segments) {
+        if scene
+            .component::<Translation>(entity)?
+            .is_some_and(|value| matches!(value.text.origin, Origin::User))
+        {
+            continue;
+        }
+        let text = if source.trim() == "\u{2026}" {
+            "\u{2026}".to_owned()
+        } else {
+            text
+        };
+        edit.set(
+            entity,
+            &Translation {
+                text: Authored::generated(text, generated.clone()),
+                language: Some(language.clone()),
+            },
+        )?;
+    }
+    if scene.component::<StalePage>(page)?.is_some() {
+        edit.remove::<StalePage>(page)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -766,5 +791,99 @@ mod tests {
                 note: Some("both like the band".into()),
             }]
         );
+    }
+
+    #[tokio::test]
+    async fn retranslation_keeps_user_edits_and_clears_the_stale_marker() {
+        let mut session = Session::memory().await.unwrap();
+        let (mut page, mut machine, mut manual) = (None, None, None);
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let id = edit.add_page(PageDraft::new("p", 1.0, 1.0), At::End)?;
+                let mut layer = |source: &str, translation: Option<Authored<String>>| {
+                    let content = edit.add_text_content(id, At::End)?;
+                    edit.add_text_layer(
+                        id,
+                        At::End,
+                        content,
+                        &TextLayout {
+                            origin: Origin::User,
+                            kind: TextLayoutKind::Paragraph,
+                            angle_degrees: None,
+                        },
+                    )?;
+                    edit.set(
+                        content,
+                        &SourceText {
+                            text: Authored::user(source.to_owned()),
+                            language: None,
+                        },
+                    )?;
+                    if let Some(text) = translation {
+                        edit.set(
+                            content,
+                            &Translation {
+                                text,
+                                language: None,
+                            },
+                        )?;
+                    }
+                    Ok::<_, koharu_scene::Error>(content)
+                };
+                machine = Some(layer("a", None)?);
+                manual = Some(layer("b", Some(Authored::user("mine".to_owned())))?);
+                edit.set(id, &StalePage {})?;
+                page = Some(id);
+                Ok(())
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        let (page, machine, manual) = (page.unwrap(), machine.unwrap(), manual.unwrap());
+        // Make the first translation machine-authored; the second stays the user's.
+        let generated = generation(PRODUCER, "test").unwrap();
+        let mut edit = scene.edit_as(generated.clone());
+        edit.set(
+            machine,
+            &Translation {
+                text: Authored::generated("old".to_owned(), generated.clone()),
+                language: None,
+            },
+        )
+        .unwrap();
+        let scene = session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap()
+            .snapshot;
+
+        let language = LanguageTag::new("en").unwrap();
+        let mut edit = scene.edit_as(generated.clone());
+        write_translations(
+            &scene,
+            &mut edit,
+            page,
+            vec![(machine, "a".into()), (manual, "b".into())],
+            vec!["new".into(), "overwritten".into()],
+            &language,
+            &generated,
+        )
+        .unwrap();
+        let scene = session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap()
+            .snapshot;
+
+        let text = |entity| {
+            scene
+                .component::<Translation>(entity)
+                .unwrap()
+                .unwrap()
+                .text
+                .value
+        };
+        assert_eq!((text(machine), text(manual)), ("new".into(), "mine".into()));
+        assert!(scene.component::<StalePage>(page).unwrap().is_none());
     }
 }

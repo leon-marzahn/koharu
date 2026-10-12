@@ -150,6 +150,21 @@ impl Component for Proposals {
     }
 }
 
+/// Marks a page whose translation predates an edit to the character sheet or term list.
+/// Recorded at edit time, removed by the translation stage; nothing reruns automatically.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct StalePage {}
+
+impl Component for StalePage {
+    const KIND: &'static str = "dev.koharu.stale-page";
+    const SHARED_WITH_PIPELINE: bool = true;
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Page {

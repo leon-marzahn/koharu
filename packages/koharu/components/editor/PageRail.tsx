@@ -36,6 +36,7 @@ import {
   type PageImportSource,
   type PageSummary,
   type ProjectInfo,
+  type Scope,
 } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
@@ -205,6 +206,16 @@ export function PageRail() {
       })
       .catch(() => undefined)
 
+  // Only ever run on click: stale pages are marked, never retranslated automatically.
+  const staleIds = useMemo(() => pages.filter((page) => page.stale).map((page) => page.id), [pages])
+  const busy = useKoharuStore((state) =>
+    Object.values(state.jobs).some((job) => job.state === 'running'),
+  )
+  const retranslate = (scope: Scope) =>
+    void call(commands.process, scope, { operation: 'only', stage: 'translation' }).catch(
+      () => undefined,
+    )
+
   const openRename = (page: PageSummary) => {
     setRenaming(page)
     setRenameValue(page.label)
@@ -263,6 +274,33 @@ export function PageRail() {
                 onChange={(event) => setQuery(event.currentTarget.value)}
               />
             </label>
+          </div>
+        )}
+
+        {pages.length > 0 && (
+          <div className='flex flex-col gap-1 border-b px-2 py-1.5'>
+            {staleIds.length > 0 && (
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                disabled={busy}
+                className='h-6 justify-start text-[10px]'
+                onClick={() => retranslate({ scope: 'pages', value: staleIds })}
+              >
+                {t('navigator.retranslateStale', { count: staleIds.length })}
+              </Button>
+            )}
+            <Button
+              type='button'
+              size='sm'
+              variant='ghost'
+              disabled={busy}
+              className='h-6 justify-start text-[10px]'
+              onClick={() => retranslate({ scope: 'project' })}
+            >
+              {t('navigator.retranslateAll')}
+            </Button>
           </div>
         )}
 
@@ -507,6 +545,14 @@ function PageItem({
       <div className='min-w-0 py-0.5'>
         <div className='flex items-start gap-1'>
           <span className='min-w-0 flex-1 truncate text-[10px] font-medium'>{page.label}</span>
+          {page.stale && (
+            <span
+              title={t('navigator.stale')}
+              className='shrink-0 rounded bg-amber-500/15 px-1 py-px text-[8px] font-medium text-amber-600 dark:text-amber-400'
+            >
+              {t('navigator.stale')}
+            </span>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={

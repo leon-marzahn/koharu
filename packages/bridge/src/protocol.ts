@@ -407,6 +407,8 @@ export type PageSummary = {
 	size: PageSize,
 	source_asset: string | null,
 	layer_count: number,
+	/**  Translation predates a sheet/term edit; cleared when the page is retranslated. */
+	stale: boolean,
 };
 
 export type PaintBrush = {

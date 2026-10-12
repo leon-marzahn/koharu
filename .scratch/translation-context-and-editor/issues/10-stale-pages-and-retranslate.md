@@ -4,10 +4,10 @@
 
 **Blocked by:** 05 Character sheet (manual), 06 Term list (manual)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Stale rules above hold for the old and new source strings
-- [ ] Stale marker shows in the page rail and clears after retranslation
-- [ ] Both retranslate actions run the translation stage and keep user-edited translations
-- [ ] No automatic reruns
-- [ ] Stage and component tests cover the above
+- [x] Stale rules above hold for the old and new source strings
+- [x] Stale marker shows in the page rail and clears after retranslation
+- [x] Both retranslate actions run the translation stage and keep user-edited translations
+- [x] No automatic reruns
+- [x] Stage and component tests cover the above
