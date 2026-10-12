@@ -407,6 +407,7 @@
       "title": "流程"
     },
     "providers": {
+      "addHeader": "Add header",
       "clearCredential": "清除 {{provider}} 認證資訊",
       "configured": "已設定",
       "connections": "連線",
@@ -414,7 +415,11 @@
       "credential": "認證資訊",
       "credentialLabel": "{{provider}} 認證資訊",
       "description": "連線翻譯和語言模型提供者。",
+      "headerName": "Header name",
+      "headerValue": "Value",
+      "headers": "Request headers",
       "notConfigured": "未設定",
+      "removeHeader": "Remove header",
       "title": "提供者"
     },
     "shortcuts": {

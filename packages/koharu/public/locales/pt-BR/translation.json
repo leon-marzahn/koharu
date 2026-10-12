@@ -407,6 +407,7 @@
       "title": "Pipeline"
     },
     "providers": {
+      "addHeader": "Add header",
       "clearCredential": "Limpar credencial de {{provider}}",
       "configured": "Configurado",
       "connections": "Conexões",
@@ -414,7 +415,11 @@
       "credential": "Credencial",
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecte provedores de tradução e modelos de linguagem.",
+      "headerName": "Header name",
+      "headerValue": "Value",
+      "headers": "Request headers",
       "notConfigured": "Não configurado",
+      "removeHeader": "Remove header",
       "title": "Provedores"
     },
     "shortcuts": {

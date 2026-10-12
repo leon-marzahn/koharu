@@ -407,6 +407,7 @@
       "title": "Canalización"
     },
     "providers": {
+      "addHeader": "Add header",
       "clearCredential": "Borrar credencial de {{provider}}",
       "configured": "Configurado",
       "connections": "Conexiones",
@@ -414,7 +415,11 @@
       "credential": "Credencial",
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecta proveedores de traducción y modelos de lenguaje.",
+      "headerName": "Header name",
+      "headerValue": "Value",
+      "headers": "Request headers",
       "notConfigured": "Sin configurar",
+      "removeHeader": "Remove header",
       "title": "Proveedores"
     },
     "shortcuts": {

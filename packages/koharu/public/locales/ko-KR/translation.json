@@ -407,6 +407,7 @@
       "title": "파이프라인"
     },
     "providers": {
+      "addHeader": "Add header",
       "clearCredential": "{{provider}} 자격 증명 지우기",
       "configured": "설정됨",
       "connections": "연결",
@@ -414,7 +415,11 @@
       "credential": "자격 증명",
       "credentialLabel": "{{provider}} 자격 증명",
       "description": "번역 및 언어 모델 제공자를 연결합니다.",
+      "headerName": "Header name",
+      "headerValue": "Value",
+      "headers": "Request headers",
       "notConfigured": "설정 안 됨",
+      "removeHeader": "Remove header",
       "title": "제공자"
     },
     "shortcuts": {

@@ -407,6 +407,7 @@
       "title": "パイプライン"
     },
     "providers": {
+      "addHeader": "Add header",
       "clearCredential": "{{provider}}の認証情報を消去",
       "configured": "設定済み",
       "connections": "接続",
@@ -414,7 +415,11 @@
       "credential": "認証情報",
       "credentialLabel": "{{provider}}の認証情報",
       "description": "翻訳および言語モデルのプロバイダーに接続します。",
+      "headerName": "Header name",
+      "headerValue": "Value",
+      "headers": "Request headers",
       "notConfigured": "未設定",
+      "removeHeader": "Remove header",
       "title": "プロバイダー"
     },
     "shortcuts": {

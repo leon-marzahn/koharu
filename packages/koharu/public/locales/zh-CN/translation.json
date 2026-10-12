@@ -407,6 +407,7 @@
       "title": "流水线"
     },
     "providers": {
+      "addHeader": "Add header",
       "clearCredential": "清除 {{provider}} 凭据",
       "configured": "已配置",
       "connections": "连接",
@@ -414,7 +415,11 @@
       "credential": "凭据",
       "credentialLabel": "{{provider}} 凭据",
       "description": "连接翻译和语言模型提供商。",
+      "headerName": "Header name",
+      "headerValue": "Value",
+      "headers": "Request headers",
       "notConfigured": "未配置",
+      "removeHeader": "Remove header",
       "title": "提供商"
     },
     "shortcuts": {
