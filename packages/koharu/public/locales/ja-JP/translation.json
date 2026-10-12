@@ -353,7 +353,10 @@
     "restoreShort": "復元",
     "rejected": "却下済み（{{count}}）",
     "pendingCount": "保留中 {{count}} 件",
-    "open": "プロジェクト"
+    "open": "プロジェクト",
+    "updates": "更新の提案",
+    "updateEntry": "{{name}} の更新",
+    "was": "変更前"
   },
   "providerDescriptions": {
     "caiyun": "Caiyun 翻訳 API。",

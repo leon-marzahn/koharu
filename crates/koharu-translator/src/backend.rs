@@ -183,11 +183,34 @@ pub struct TranslationTerm {
     pub tentative: bool,
 }
 
-/// New characters and terms the model suggests; never applied without review.
+/// A suggested change to an existing character, keyed by `source_name`; `None` = unchanged.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
+pub struct TranslationCharacterUpdate {
+    pub source_name: String,
+    pub target_name: Option<String>,
+    pub speech_style: Option<String>,
+    pub appearance: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// A suggested change to an existing term, keyed by `source`; `None` = unchanged.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
+pub struct TranslationTermUpdate {
+    pub source: String,
+    pub target: Option<String>,
+    pub note: Option<String>,
+}
+
+/// New characters and terms, and updates to existing ones, the model suggests; never applied
+/// without review.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TranslationProposals {
     pub characters: Vec<TranslationCharacter>,
     pub terms: Vec<TranslationTerm>,
+    pub character_updates: Vec<TranslationCharacterUpdate>,
+    pub term_updates: Vec<TranslationTermUpdate>,
 }
 
 /// A finished translation: one text per input segment, plus optional proposals.

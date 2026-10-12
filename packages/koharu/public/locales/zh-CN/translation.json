@@ -353,7 +353,10 @@
     "restoreShort": "恢复",
     "rejected": "已拒绝（{{count}}）",
     "pendingCount": "{{count}} 个待定条目",
-    "open": "项目"
+    "open": "项目",
+    "updates": "建议的更新",
+    "updateEntry": "{{name}} 的更新",
+    "was": "原值"
   },
   "providerDescriptions": {
     "caiyun": "Caiyun 翻译 API。",

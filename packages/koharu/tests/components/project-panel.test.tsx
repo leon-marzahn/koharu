@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -17,6 +17,8 @@ import {
 const emptyProposals: Proposals = {
   characters: [],
   terms: [],
+  character_updates: [],
+  term_updates: [],
   rejected_characters: [],
   rejected_terms: [],
   use_in_prompts: false,
@@ -206,6 +208,71 @@ describe('project panel', () => {
     await waitFor(() => expect(setContext).toHaveBeenLastCalledWith([], [demon], emptyProposals))
   })
 
+  it('shows old and new values of changed fields only, and approves just those', async () => {
+    const user = userEvent.setup()
+    const setContext = vi.spyOn(commands, 'setContext').mockResolvedValue(null)
+    const update = {
+      source_name: 'アリス',
+      target_name: null,
+      speech_style: 'curt',
+      appearance: null,
+      notes: null,
+    }
+    const proposals = { ...emptyProposals, character_updates: [update] }
+    install([alice], [], proposals)
+
+    const row = screen.getByRole('group', { name: 'Update to アリス' })
+    expect(row).toHaveTextContent('formal') // old value
+    const style = within(row).getByLabelText('Speech style')
+    expect(style).toHaveValue('curt') // new value
+    expect(within(row).queryByLabelText('Appearance')).not.toBeInTheDocument() // unchanged
+
+    // Edit the new value before approving.
+    style.focus()
+    await user.keyboard('{Control>}a{/Control}terse')
+    await user.tab()
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([alice], [], {
+        ...proposals,
+        character_updates: [{ ...update, speech_style: 'terse' }],
+      }),
+    )
+
+    screen.getByRole('button', { name: 'Approve アリス' }).focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([{ ...alice, speech_style: 'curt' }], [], {
+        ...proposals,
+        character_updates: [],
+      }),
+    )
+  })
+
+  it('rejecting an update just deletes it, and term updates approve the same way', async () => {
+    const user = userEvent.setup()
+    const setContext = vi.spyOn(commands, 'setContext').mockResolvedValue(null)
+    const update = { source: '魔王', target: 'Dark Lord', note: null }
+    const proposals = { ...emptyProposals, term_updates: [update] }
+    install([], [demon], proposals)
+    await user.click(screen.getByRole('tab', { name: 'Term list' }))
+
+    expect(screen.getByRole('group', { name: 'Update to 魔王' })).toHaveTextContent('Demon King')
+    await user.click(screen.getByRole('button', { name: 'Approve 魔王' }))
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([], [{ ...demon, target: 'Dark Lord' }], {
+        ...proposals,
+        term_updates: [],
+      }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Reject 魔王' }))
+    await waitFor(() =>
+      expect(setContext).toHaveBeenLastCalledWith([], [demon], {
+        ...proposals,
+        term_updates: [],
+      }),
+    )
+  })
+
   it('toggles using pending entries in prompts', async () => {
     const user = userEvent.setup()
     const setContext = vi.spyOn(commands, 'setContext').mockResolvedValue(null)
@@ -225,10 +292,18 @@ describe('project panel', () => {
     install(
       [],
       [],
-      { ...emptyProposals, characters: [alice], terms: [demon, demon] },
+      {
+        ...emptyProposals,
+        characters: [alice],
+        terms: [demon, demon],
+        character_updates: [
+          { source_name: 'a', target_name: 'x', speech_style: null, appearance: null, notes: null },
+        ],
+        term_updates: [{ source: 'b', target: 'y', note: null }],
+      },
       <RightSidebar />,
     )
-    expect(screen.getByRole('button', { name: /3 pending entries/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /5 pending entries/ })).toBeInTheDocument()
   })
 
   it('shows no badge when nothing is pending', () => {

@@ -6,8 +6,8 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Value, json};
 
 use crate::{
-    Language, Translated, TranslationCharacter, TranslationContext, TranslationProposals,
-    TranslationRequest, TranslationTerm,
+    Language, Translated, TranslationCharacter, TranslationCharacterUpdate, TranslationContext,
+    TranslationProposals, TranslationRequest, TranslationTerm, TranslationTermUpdate,
 };
 
 pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, String)> {
@@ -75,7 +75,15 @@ fn proposals(value: &Value) -> TranslationProposals {
     let mut proposals = TranslationProposals {
         characters: entries(value, "characters"),
         terms: entries(value, "terms"),
+        character_updates: entries(value, "character_updates"),
+        term_updates: entries(value, "term_updates"),
     };
+    proposals
+        .character_updates
+        .retain(|update: &TranslationCharacterUpdate| !update.source_name.trim().is_empty());
+    proposals
+        .term_updates
+        .retain(|update: &TranslationTermUpdate| !update.source.trim().is_empty());
     proposals
         .characters
         .retain(|character: &TranslationCharacter| !character.source_name.trim().is_empty());
@@ -176,9 +184,39 @@ pub(crate) fn output_schema(expected: usize) -> Value {
                             "required": ["source", "target", "note"],
                             "additionalProperties": false
                         }
+                    },
+                    // Strict structured outputs need every property required, so "unchanged"
+                    // is an explicit null rather than an absent field.
+                    "character_updates": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source_name": { "type": "string" },
+                                "target_name": { "type": ["string", "null"] },
+                                "speech_style": { "type": ["string", "null"] },
+                                "appearance": { "type": ["string", "null"] },
+                                "notes": { "type": ["string", "null"] }
+                            },
+                            "required": ["source_name", "target_name", "speech_style", "appearance", "notes"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "term_updates": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source": { "type": "string" },
+                                "target": { "type": ["string", "null"] },
+                                "note": { "type": ["string", "null"] }
+                            },
+                            "required": ["source", "target", "note"],
+                            "additionalProperties": false
+                        }
                     }
                 },
-                "required": ["characters", "terms"],
+                "required": ["characters", "terms", "character_updates", "term_updates"],
                 "additionalProperties": false
             }
         },
@@ -268,6 +306,8 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         The `proposals` object may list new `characters` (source_name, target_name, speech_style, appearance, notes) and new `terms` (source, target, note).
         Propose only names and terms that recur or will clearly recur, and only when their source is not already in the character sheet or term list.
         Never propose a source listed in `known_sources`; those are pending or rejected.
+        To change an existing character or term, use `character_updates` (source_name plus target_name, speech_style, appearance, notes) or `term_updates` (source plus target, note). source_name or source must match the existing entry exactly. Set a field to null to leave it unchanged.
+        Propose an update only for a clearly new fact about an existing entry, such as a newly noticed speech quirk or a name correction; never restate current values.
         Use empty arrays when there is nothing to propose. Proposals never replace the translations.
     "}.trim_end());
 
@@ -559,6 +599,37 @@ mod tests {
         assert_eq!(translated.proposals.characters[0].target_name, "Alice");
         assert_eq!(translated.proposals.terms.len(), 1);
         assert_eq!(translated.proposals.terms[0].source, "魔王");
+    }
+
+    #[test]
+    fn updates_keep_only_changed_fields_and_drop_malformed_entries() {
+        let source = ["one".to_owned()];
+        let response = r#"{"translations":[{"id":0,"text":"hello"}],"proposals":{
+            "character_updates":[{"source_name":"アリス","target_name":null,"speech_style":"curt","appearance":null,"notes":null},{"speech_style":"no key"},{"source_name":" "},"junk",{"source_name":"x","notes":5}],
+            "term_updates":[{"source":"魔王","target":"Dark Lord","note":null},{"source":7}]}}"#;
+        let proposals = translations("test", response, &source).unwrap().proposals;
+        assert_eq!(
+            proposals.character_updates,
+            [TranslationCharacterUpdate {
+                source_name: "アリス".into(),
+                speech_style: Some("curt".into()),
+                ..Default::default()
+            }]
+        );
+        assert_eq!(
+            proposals.term_updates,
+            [TranslationTermUpdate {
+                source: "魔王".into(),
+                target: Some("Dark Lord".into()),
+                ..Default::default()
+            }]
+        );
+        let schema = output_schema(1);
+        let updates = &schema["properties"]["proposals"]["properties"];
+        assert_eq!(
+            updates["term_updates"]["items"]["properties"]["note"]["type"][1],
+            "null"
+        );
     }
 
     #[test]

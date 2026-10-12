@@ -145,6 +145,18 @@ export type Character = {
 	notes: string,
 };
 
+/**
+ *  A proposed change to an approved character, identified by its `source_name`.
+ *  Only the `Some` fields change; `None` leaves the current value alone.
+ */
+export type CharacterUpdate = {
+	source_name: string,
+	target_name: string | null,
+	speech_style: string | null,
+	appearance: string | null,
+	notes: string | null,
+};
+
 export type ClaudeConfig = Record<string, never>;
 
 export type CodexModel = {
@@ -457,6 +469,9 @@ export type ProjectSummary = {
 export type Proposals = {
 	characters: Character[],
 	terms: Term[],
+	/**  Pending changes to approved entries; rejecting one just deletes it. */
+	character_updates: CharacterUpdate[],
+	term_updates: TermUpdate[],
 	rejected_characters: string[],
 	rejected_terms: string[],
 	/**  Send pending entries in prompts, marked tentative. */
@@ -519,6 +534,13 @@ export type Term = {
 	source: string,
 	target: string,
 	note: string,
+};
+
+/**  A proposed change to an approved term, identified by its `source`. */
+export type TermUpdate = {
+	source: string,
+	target: string | null,
+	note: string | null,
 };
 
 export type TextAlignment = "Start" | "Center" | "End" | "Justify";

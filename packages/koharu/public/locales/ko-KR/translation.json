@@ -353,7 +353,10 @@
     "restoreShort": "복원",
     "rejected": "거부됨 ({{count}})",
     "pendingCount": "보류 중 {{count}}개",
-    "open": "프로젝트"
+    "open": "프로젝트",
+    "updates": "제안된 업데이트",
+    "updateEntry": "{{name}} 업데이트",
+    "was": "이전"
   },
   "providerDescriptions": {
     "caiyun": "Caiyun 번역 API입니다.",

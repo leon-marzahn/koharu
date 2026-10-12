@@ -4,10 +4,10 @@
 
 **Blocked by:** 07 Proposals: new entries and review
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Output schema accepts updates by entry id with only changed fields
-- [ ] Updates for unknown ids are dropped
-- [ ] Panel shows per-field diffs on update rows
-- [ ] Approving applies only the changed fields
-- [ ] Tests cover schema, application and diff display
+- [x] Output schema accepts updates by entry id with only changed fields
+- [x] Updates for unknown ids are dropped
+- [x] Panel shows per-field diffs on update rows
+- [x] Approving applies only the changed fields
+- [x] Tests cover schema, application and diff display

@@ -353,7 +353,10 @@
     "restoreShort": "Восстановить",
     "rejected": "Отклонённые ({{count}})",
     "pendingCount": "Ожидают: {{count}}",
-    "open": "Проект"
+    "open": "Проект",
+    "updates": "Предложенные изменения",
+    "updateEntry": "Изменение {{name}}",
+    "was": "было"
   },
   "providerDescriptions": {
     "caiyun": "API перевода Caiyun.",

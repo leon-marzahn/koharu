@@ -353,7 +353,10 @@
     "restoreShort": "還原",
     "rejected": "已拒絕（{{count}}）",
     "pendingCount": "{{count}} 個待定項目",
-    "open": "專案"
+    "open": "專案",
+    "updates": "建議的更新",
+    "updateEntry": "{{name}} 的更新",
+    "was": "原值"
   },
   "providerDescriptions": {
     "caiyun": "Caiyun 翻譯 API。",

@@ -353,7 +353,10 @@
     "restoreShort": "Geri yükle",
     "rejected": "Reddedilenler ({{count}})",
     "pendingCount": "{{count}} bekleyen girdi",
-    "open": "Proje"
+    "open": "Proje",
+    "updates": "Önerilen güncellemeler",
+    "updateEntry": "{{name}} güncellemesi",
+    "was": "önceki"
   },
   "providerDescriptions": {
     "caiyun": "Caiyun çeviri API'si.",

@@ -353,7 +353,10 @@
     "restoreShort": "Restaurar",
     "rejected": "Rechazadas ({{count}})",
     "pendingCount": "{{count}} entradas pendientes",
-    "open": "Proyecto"
+    "open": "Proyecto",
+    "updates": "Cambios propuestos",
+    "updateEntry": "Cambio en {{name}}",
+    "was": "antes"
   },
   "providerDescriptions": {
     "caiyun": "API de traducción de Caiyun.",

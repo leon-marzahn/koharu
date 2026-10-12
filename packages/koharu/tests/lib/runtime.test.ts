@@ -64,6 +64,8 @@ const project: ProjectInfo = {
   proposals: {
     characters: [],
     terms: [],
+    character_updates: [],
+    term_updates: [],
     rejected_characters: [],
     rejected_terms: [],
     use_in_prompts: false,

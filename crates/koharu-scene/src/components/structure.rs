@@ -90,16 +90,42 @@ impl Component for TermList {
     }
 }
 
+/// A proposed change to an approved character, identified by its `source_name`.
+/// Only the `Some` fields change; `None` leaves the current value alone.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct CharacterUpdate {
+    pub source_name: String,
+    pub target_name: Option<String>,
+    pub speech_style: Option<String>,
+    pub appearance: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// A proposed change to an approved term, identified by its `source`.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct TermUpdate {
+    pub source: String,
+    pub target: Option<String>,
+    pub note: Option<String>,
+}
+
 /// Model-proposed character and term entries awaiting review, plus the user's review state.
 ///
 /// Kept apart from `CharacterSheet`/`TermList` so those stay the approved, always-sent data:
 /// approving moves an entry across, and rejected sources are remembered here so they are
 /// never proposed again.
-#[revisioned(revision = 1)]
+#[revisioned(revision = 2)]
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub struct Proposals {
     pub characters: Vec<Character>,
     pub terms: Vec<Term>,
+    /// Pending changes to approved entries; rejecting one just deletes it.
+    #[revision(start = 2)]
+    pub character_updates: Vec<CharacterUpdate>,
+    #[revision(start = 2)]
+    pub term_updates: Vec<TermUpdate>,
     pub rejected_characters: Vec<String>,
     pub rejected_terms: Vec<String>,
     /// Send pending entries in prompts, marked tentative.

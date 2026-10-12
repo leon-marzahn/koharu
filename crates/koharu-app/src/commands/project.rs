@@ -1431,7 +1431,7 @@ fn rasterize_stroke(
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::{Generation, ProducerId, WritingMode};
+    use koharu_scene::{CharacterUpdate, Generation, ProducerId, WritingMode};
 
     use super::*;
 
@@ -1695,6 +1695,48 @@ mod tests {
             &[ScenePoint { x: 2.0, y: 2.0 }],
         );
         assert_eq!(white.get_pixel(2, 2).0, [255, 255, 255, 255]);
+    }
+
+    #[tokio::test]
+    async fn approving_an_update_applies_only_changed_fields_in_one_undo_step() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        let alice = Character {
+            source_name: "a".into(),
+            target_name: "Alice".into(),
+            speech_style: "polite".into(),
+            ..Character::default()
+        };
+        let update = CharacterUpdate {
+            source_name: "a".into(),
+            speech_style: Some("curt".into()),
+            ..CharacterUpdate::default()
+        };
+        let proposals = Proposals {
+            character_updates: vec![update.clone()],
+            ..Proposals::default()
+        };
+        let commit = project
+            .set_context(vec![alice.clone()], Vec::new(), proposals.clone())
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+
+        // What the panel sends on approve: patched entry, update removed.
+        let patched = Character {
+            speech_style: "curt".into(),
+            ..alice.clone()
+        };
+        let commit = project
+            .set_context(vec![patched.clone()], Vec::new(), Proposals::default())
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        assert_eq!(project.info().characters, [patched]);
+        assert!(project.info().proposals.character_updates.is_empty());
+
+        project.undo().await.unwrap();
+        assert_eq!(project.info().characters, [alice]);
+        assert_eq!(project.info().proposals, proposals);
     }
 
     #[tokio::test]

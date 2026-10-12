@@ -7,7 +7,14 @@ import { useTranslation } from 'react-i18next'
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
 import { call } from '@/lib/backend'
 import { projectKey, refresh, useProject } from '@/lib/queries'
-import { commands, type Character, type Proposals, type Term } from '@koharu/bridge/protocol'
+import {
+  commands,
+  type Character,
+  type CharacterUpdate,
+  type Proposals,
+  type Term,
+  type TermUpdate,
+} from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@koharu/ui/components/tabs'
 
@@ -30,6 +37,8 @@ const blank: Character = {
 const emptyProposals: Proposals = {
   characters: [],
   terms: [],
+  character_updates: [],
+  term_updates: [],
   rejected_characters: [],
   rejected_terms: [],
   use_in_prompts: false,
@@ -97,6 +106,9 @@ function CharactersTab() {
   const pending = proposals.characters
   const setPending = (next: Character[], rest: Partial<Proposals> = {}) =>
     saveContext({ proposals: { ...proposals, ...rest, characters: next } })
+  const updates = proposals.character_updates
+  const setUpdates = (next: CharacterUpdate[]) =>
+    saveContext({ proposals: { ...proposals, character_updates: next } })
 
   return (
     <div className='flex flex-col gap-3 p-2.5'>
@@ -135,6 +147,31 @@ function CharactersTab() {
                 pending.filter((_, i) => i !== index),
                 { rejected_characters: [...proposals.rejected_characters, character.source_name] },
               ),
+          }}
+        />
+      ))}
+      {updates.length > 0 && <h3 className='text-[11px] font-medium'>{t('project.updates')}</h3>}
+      {updates.map((update, index) => (
+        <UpdateEntry
+          key={`update-${update.source_name}`}
+          name={update.source_name}
+          fields={fields.slice(1)}
+          current={characters.find((c) => c.source_name === update.source_name)}
+          update={update}
+          onChange={(next) => setUpdates(updates.map((item, i) => (i === index ? next : item)))}
+          review={{
+            // Approving applies only the changed fields; one commit, so one undo step.
+            onApprove: () =>
+              saveContext({
+                characters: characters.map((c) =>
+                  c.source_name === update.source_name ? { ...c, ...changed(update) } : c,
+                ),
+                proposals: {
+                  ...proposals,
+                  character_updates: updates.filter((_, i) => i !== index),
+                },
+              }),
+            onReject: () => setUpdates(updates.filter((_, i) => i !== index)),
           }}
         />
       ))}
@@ -207,6 +244,9 @@ function TermsTab() {
   const pending = proposals.terms
   const setPending = (next: Term[], rest: Partial<Proposals> = {}) =>
     saveContext({ proposals: { ...proposals, ...rest, terms: next } })
+  const updates = proposals.term_updates
+  const setUpdates = (next: TermUpdate[]) =>
+    saveContext({ proposals: { ...proposals, term_updates: next } })
 
   return (
     <div className='flex flex-col gap-3 p-2.5'>
@@ -249,6 +289,27 @@ function TermsTab() {
                 pending.filter((_, i) => i !== index),
                 { rejected_terms: [...proposals.rejected_terms, term.source] },
               ),
+          }}
+        />
+      ))}
+      {updates.length > 0 && <h3 className='text-[11px] font-medium'>{t('project.updates')}</h3>}
+      {updates.map((update, index) => (
+        <UpdateEntry
+          key={`update-${update.source}`}
+          name={update.source}
+          fields={termFields.slice(1)}
+          current={terms.find((term) => term.source === update.source)}
+          update={update}
+          onChange={(next) => setUpdates(updates.map((item, i) => (i === index ? next : item)))}
+          review={{
+            onApprove: () =>
+              saveContext({
+                terms: terms.map((term) =>
+                  term.source === update.source ? { ...term, ...changed(update) } : term,
+                ),
+                proposals: { ...proposals, term_updates: updates.filter((_, i) => i !== index) },
+              }),
+            onReject: () => setUpdates(updates.filter((_, i) => i !== index)),
           }}
         />
       ))}
@@ -311,6 +372,59 @@ function TermEntry({
 }
 
 type Review = { onApprove: () => void; onReject: () => void }
+
+// The fields an update actually changes: null means "leave as is".
+function changed<T extends object>(update: T) {
+  return Object.fromEntries(Object.entries(update).filter(([, value]) => value !== null))
+}
+
+// An update row shows each changed field as old -> new; the new value is editable before approving.
+function UpdateEntry<U extends object>({
+  name,
+  fields,
+  current,
+  update,
+  onChange,
+  review,
+}: {
+  name: string
+  fields: ReadonlyArray<readonly [string, string]>
+  current?: object
+  update: U
+  onChange: (update: U) => void
+  review: Review
+}) {
+  const { t } = useTranslation()
+  const id = useId()
+  const old = (current ?? {}) as Record<string, string>
+  const next = update as Record<string, string | null>
+  return (
+    <fieldset className='flex min-w-0 flex-col gap-1.5 rounded-md border border-border/60 p-2'>
+      <legend className='px-1 text-[11px] font-medium'>{t('project.updateEntry', { name })}</legend>
+      {fields
+        .filter(([key]) => next[key] !== null && next[key] !== undefined)
+        .map(([key, label]) => (
+          <div key={key} className='flex flex-col gap-0.5'>
+            <label htmlFor={`${id}-${key}`} className='text-[10px] text-muted-foreground'>
+              {t(`project.${label}`)}
+            </label>
+            <p className='text-[11px] text-muted-foreground line-through'>
+              <span className='sr-only'>{t('project.was')}: </span>
+              {old[key] ?? ''}
+            </p>
+            <CommitTextarea
+              id={`${id}-${key}`}
+              rows={1}
+              className='max-h-24 min-h-8 w-full min-w-0 resize-y rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
+              value={next[key] ?? ''}
+              onCommit={(value) => onChange({ ...update, [key]: value })}
+            />
+          </div>
+        ))}
+      <EntryActions name={name} deleteLabel='project.delete' review={review} />
+    </fieldset>
+  )
+}
 
 // Pending entries are edited in place and then approved or rejected; approved ones can be deleted.
 function EntryActions({

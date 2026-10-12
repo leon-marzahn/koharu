@@ -1,8 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{
-    Authored, CharacterSheet, EntityId, LanguageTag, Origin, Proposals, Snapshot, SourceText,
-    TermList, Translation,
+    Authored, CharacterSheet, CharacterUpdate, EntityId, LanguageTag, Origin, Proposals, Snapshot,
+    SourceText, TermList, TermUpdate, Translation,
 };
 use koharu_translator::{
     TranslationCharacter, TranslationContext, TranslationProposals, TranslationRequest,
@@ -135,7 +135,7 @@ fn merge_proposals(scene: &Snapshot, new: TranslationProposals) -> Result<Option
         .project_component::<CharacterSheet>()?
         .unwrap_or_default();
     let terms = scene.project_component::<TermList>()?.unwrap_or_default();
-    let before = (merged.characters.len(), merged.terms.len());
+    let before = merged.clone();
     for character in new.characters {
         let source = character.source_name.trim().to_owned();
         let known = |name: &str| name.trim() == source;
@@ -170,7 +170,74 @@ fn merge_proposals(scene: &Snapshot, new: TranslationProposals) -> Result<Option
             note: term.note,
         });
     }
-    Ok((before != (merged.characters.len(), merged.terms.len())).then_some(merged))
+    // Updates target approved entries only. Fields equal to the current value are dropped, an
+    // update with nothing left is dropped, and one for an already pending entry merges into it.
+    for update in new.character_updates {
+        let key = update.source_name.trim();
+        let Some(current) = sheet
+            .characters
+            .iter()
+            .find(|c| c.source_name.trim() == key)
+        else {
+            continue;
+        };
+        let changed = |new: Option<String>, old: &str| new.filter(|value| value != old);
+        let update = CharacterUpdate {
+            source_name: current.source_name.clone(),
+            target_name: changed(update.target_name, &current.target_name),
+            speech_style: changed(update.speech_style, &current.speech_style),
+            appearance: changed(update.appearance, &current.appearance),
+            notes: changed(update.notes, &current.notes),
+        };
+        if update
+            == (CharacterUpdate {
+                source_name: update.source_name.clone(),
+                ..Default::default()
+            })
+        {
+            continue;
+        }
+        match merged
+            .character_updates
+            .iter_mut()
+            .find(|u| u.source_name == update.source_name)
+        {
+            Some(pending) => {
+                pending.target_name = update.target_name.or(pending.target_name.take());
+                pending.speech_style = update.speech_style.or(pending.speech_style.take());
+                pending.appearance = update.appearance.or(pending.appearance.take());
+                pending.notes = update.notes.or(pending.notes.take());
+            }
+            None => merged.character_updates.push(update),
+        }
+    }
+    for update in new.term_updates {
+        let key = update.source.trim();
+        let Some(current) = terms.terms.iter().find(|t| t.source.trim() == key) else {
+            continue;
+        };
+        let changed = |new: Option<String>, old: &str| new.filter(|value| value != old);
+        let update = TermUpdate {
+            source: current.source.clone(),
+            target: changed(update.target, &current.target),
+            note: changed(update.note, &current.note),
+        };
+        if update.target.is_none() && update.note.is_none() {
+            continue;
+        }
+        match merged
+            .term_updates
+            .iter_mut()
+            .find(|u| u.source == update.source)
+        {
+            Some(pending) => {
+                pending.target = update.target.or(pending.target.take());
+                pending.note = update.note.or(pending.note.take());
+            }
+            None => merged.term_updates.push(update),
+        }
+    }
+    Ok((merged != before).then_some(merged))
 }
 
 #[async_trait]
@@ -503,7 +570,7 @@ mod tests {
                 terms: vec![term("pt")],
                 rejected_characters: vec!["rc".into()],
                 rejected_terms: vec!["rt".into()],
-                use_in_prompts: false,
+                ..Default::default()
             },
         )
         .await;
@@ -521,6 +588,7 @@ mod tests {
                     ..Default::default()
                 })
                 .into(),
+            ..Default::default()
         };
         let merged = merge_proposals(&scene, new).unwrap().unwrap();
         let sources = |p: &Proposals| {
@@ -550,5 +618,80 @@ mod tests {
         let mut known = known_sources(&scene).unwrap();
         known.sort();
         assert_eq!(known, ["p", "pt", "rc", "rt"]);
+    }
+
+    #[tokio::test]
+    async fn updates_need_an_approved_entry_a_real_change_and_merge_into_pending_ones() {
+        let approved = koharu_scene::Character {
+            source_name: "a".into(),
+            target_name: "Alice".into(),
+            speech_style: "polite".into(),
+            ..Default::default()
+        };
+        let pending = CharacterUpdate {
+            source_name: "a".into(),
+            speech_style: Some("curt".into()),
+            notes: Some("old".into()),
+            ..Default::default()
+        };
+        let scene = scene_with(
+            vec![approved.clone()],
+            vec![term("t")],
+            Proposals {
+                character_updates: vec![pending],
+                ..Default::default()
+            },
+        )
+        .await;
+        let update =
+            |name: &str, target: Option<&str>, style: Option<&str>, notes: Option<&str>| {
+                let own = |v: Option<&str>| v.map(str::to_owned);
+                koharu_translator::TranslationCharacterUpdate {
+                    source_name: name.into(),
+                    target_name: own(target),
+                    speech_style: own(style),
+                    notes: own(notes),
+                    ..Default::default()
+                }
+            };
+        let new = TranslationProposals {
+            character_updates: vec![
+                update("unknown", Some("x"), None, None),
+                update("a", Some("Alice"), Some("polite"), None), // no-ops
+                update("a", Some("Alicia"), None, Some("new")),   // merges
+            ],
+            term_updates: vec![
+                koharu_translator::TranslationTermUpdate {
+                    source: "missing".into(),
+                    target: Some("x".into()),
+                    ..Default::default()
+                },
+                koharu_translator::TranslationTermUpdate {
+                    source: "t".into(),
+                    target: Some("t-t".into()), // same as current
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let merged = merge_proposals(&scene, new).unwrap().unwrap();
+        assert_eq!(
+            merged.character_updates,
+            [CharacterUpdate {
+                source_name: "a".into(),
+                target_name: Some("Alicia".into()),
+                speech_style: Some("curt".into()),
+                appearance: None,
+                notes: Some("new".into()),
+            }]
+        );
+        assert!(merged.term_updates.is_empty());
+        // The approved sheet is untouched and pending updates are never sent.
+        assert_eq!(character_sheet(&scene).unwrap()[0].target_name, "Alice");
+        let noop = TranslationProposals {
+            character_updates: vec![update("a", Some("Alice"), None, None)],
+            ..Default::default()
+        };
+        assert!(merge_proposals(&scene, noop).unwrap().is_none());
     }
 }

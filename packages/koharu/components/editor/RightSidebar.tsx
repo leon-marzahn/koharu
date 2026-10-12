@@ -14,7 +14,11 @@ export function RightSidebar() {
   const { t } = useTranslation()
   const [panel, setPanel] = useState<'agent' | 'properties' | 'project'>('properties')
   const proposals = useProject().data?.proposals
-  const pending = (proposals?.characters.length ?? 0) + (proposals?.terms.length ?? 0)
+  const pending =
+    (proposals?.characters.length ?? 0) +
+    (proposals?.terms.length ?? 0) +
+    (proposals?.character_updates.length ?? 0) +
+    (proposals?.term_updates.length ?? 0)
 
   return (
     <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-panel)]'>
