@@ -409,6 +409,22 @@ describe('canvas interaction adapter', () => {
     ])
   })
 
+  it('cancels the canvas edit when a move changes nothing, so the next drag can start', async () => {
+    installProject()
+    useKoharuStore.setState({
+      layerFrames: { element: { x: 30, y: 40, width: 50, height: 20, angle_degrees: 0 } },
+    })
+    const commit = vi.spyOn(commands, 'commitTransform').mockResolvedValue(null)
+    const surface = renderWorkspace()
+
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 30, clientX: 50, clientY: 70 })
+    fireEvent.pointerMove(surface, { pointerId: 30, clientX: 52, clientY: 70 })
+    fireEvent.pointerUp(surface, { pointerId: 30, clientX: 52, clientY: 70 })
+
+    await waitFor(() => expect(commit).toHaveBeenCalledOnce())
+    await waitFor(() => expect(canvas.cancelTransform).toHaveBeenCalled())
+  })
+
   it('resizes a selected layer through Koharu selection controls', async () => {
     installProject()
     useKoharuStore.setState({ selectedLayers: ['element'] })

@@ -202,7 +202,11 @@ export function CanvasWorkspace() {
     }
     commitPending.current = true
     void enqueue(() => call(commands.commitTransform, revision, elements))
-      .then((revision) => (revision === null ? undefined : refresh(projectKey, pagesKey, pageKey)))
+      // null = no geometry changed (e.g. snapped back to the same center). No new revision
+      // will arrive to clear the canvas's pending edit, so cancel it or every later edit fails.
+      .then((revision) =>
+        revision === null ? canvas?.cancelTransform() : refresh(projectKey, pagesKey, pageKey),
+      )
       .catch(() => canvas?.cancelTransform())
       .finally(() => {
         commitPending.current = false
