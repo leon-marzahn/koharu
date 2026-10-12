@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] − / + and ↑/↓ change size by exactly 1 and clamp to the allowed range
-- [ ] Dropdown presets still work
-- [ ] The "+" shows on the selected box only and is absent from export
-- [ ] Controls are labelled and keyboard-operable
-- [ ] Component tests cover steppers and export exclusion
+- [x] − / + and ↑/↓ change size by exactly 1 and clamp to the allowed range
+- [x] Dropdown presets still work
+- [x] The "+" shows on the selected box only and is absent from export
+- [x] Controls are labelled and keyboard-operable
+- [x] Component tests cover steppers and export exclusion

@@ -16,6 +16,7 @@ import { TitleBar } from '@/components/app/TitleBar'
 import { WindowControls } from '@/components/app/WindowChrome'
 import { ActivityCenter } from '@/components/editor/ActivityCenter'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
+import { CanvasOverlay } from '@/components/editor/CanvasOverlay'
 import { Inspector } from '@/components/editor/Inspector'
 import { PageRail } from '@/components/editor/PageRail'
 import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
@@ -730,6 +731,85 @@ describe('greenfield editor', () => {
         }),
       ]),
     )
+  })
+
+  it('steps font size by exactly 1 and keeps presets working', async () => {
+    const user = userEvent.setup()
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: page.layers.map((layer) =>
+        layer.type === 'text'
+          ? { ...layer, typography: { ...layer.typography, size: 20, auto_fit: false } }
+          : layer,
+      ),
+    }))
+    const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
+    render(<Inspector />)
+    const lastSize = () =>
+      (setTypography.mock.calls.at(-1)![0] as { typography: { size: number } }[])[0]!.typography
+        .size
+
+    await user.click(screen.getByRole('button', { name: 'Increase font size' }))
+    await waitFor(() => expect(lastSize()).toBe(21))
+    await user.click(screen.getByRole('button', { name: 'Decrease font size' }))
+    await waitFor(() => expect(lastSize()).toBe(19))
+
+    await user.click(screen.getByTestId('type-size'))
+    await user.keyboard('{ArrowUp}{Tab}')
+    await waitFor(() => expect(lastSize()).toBe(21))
+
+    await user.click(screen.getByRole('button', { name: 'Choose font size' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: '48' }))
+    await waitFor(() => expect(lastSize()).toBe(48))
+  })
+
+  it('clamps font size steppers at the maximum', async () => {
+    const user = userEvent.setup()
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: page.layers.map((layer) =>
+        layer.type === 'text'
+          ? { ...layer, typography: { ...layer.typography, size: 300, auto_fit: false } }
+          : layer,
+      ),
+    }))
+    render(<Inspector />)
+    expect(screen.getByRole('button', { name: 'Increase font size' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Increase font size' }))
+    expect(screen.getByTestId('type-size')).toHaveValue('300')
+  })
+
+  it('shows the center mark on the selected box only, inside the DOM overlay', () => {
+    installProject()
+    const page = queryClient.getQueryData(pageKey) as Parameters<typeof CanvasOverlay>[0]['page']
+    const props = {
+      page,
+      camera: { zoom: 1, translation: [0, 0] as [number, number], fitted: false },
+      hovered: null,
+      frames: useKoharuStore.getState().layerFrames,
+      previews: {},
+      draft: null,
+      cursor: null,
+      brushSize: 10,
+      showBrushCursor: false,
+      onTransformStart: vi.fn(),
+      onTransformFrame: vi.fn(),
+      onTransformEnd: vi.fn(),
+    }
+    const { rerender } = render(<CanvasOverlay {...props} selected={['element']} />)
+    const mark = screen.getByTestId('center-mark')
+    // Overlay-only: lives in the DOM overlay, never in the WebGPU canvas used for export.
+    expect(screen.getByTestId('canvas-overlay')).toContainElement(mark)
+    expect(mark).toHaveAttribute('aria-hidden', 'true')
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CanvasOverlay {...props} selected={[]} />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByTestId('center-mark')).not.toBeInTheDocument()
   })
 
   it('adjusts brush size from the toolbar popover', async () => {

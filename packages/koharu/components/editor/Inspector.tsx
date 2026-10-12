@@ -969,19 +969,25 @@ function FontSizeField({
       className='min-w-0'
       disabled={disabled}
       value={draft}
-      min={0.5}
+      min={1}
       max={300}
-      step={0.5}
+      step={1}
       onValueChange={setDraft}
       onValueCommitted={commit}
     >
       <NumberFieldGroup>
+        <NumberFieldDecrement aria-label={t('inspector.decreaseFontSize')}>
+          <Minus />
+        </NumberFieldDecrement>
         <NumberFieldInput
           data-testid='type-size'
           aria-label={t('inspector.fontSize')}
           placeholder={t('inspector.auto')}
           className='px-2 text-left'
         />
+        <NumberFieldIncrement aria-label={t('inspector.increaseFontSize')}>
+          <Plus />
+        </NumberFieldIncrement>
         <DropdownMenu>
           <DropdownMenuTrigger
             disabled={disabled}

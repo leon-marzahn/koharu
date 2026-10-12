@@ -1,5 +1,6 @@
 'use client'
 
+import { Plus } from 'lucide-react'
 import { useMemo, useRef } from 'react'
 
 import { SelectionControls } from '@/components/editor/SelectionControls'
@@ -125,6 +126,10 @@ export function CanvasOverlay({
         />
       )}
 
+      {selectedTextLayer && selectionControl && (
+        <CenterMark frame={selectionControl.frame} camera={camera} />
+      )}
+
       {selectionControl && (
         <SelectionControls
           container={root}
@@ -138,6 +143,19 @@ export function CanvasOverlay({
         />
       )}
     </div>
+  )
+}
+
+// Overlay-only guide: a DOM element above the canvas, so it can never reach rendered or exported pixels.
+function CenterMark({ frame, camera }: { frame: Frame; camera: Camera }) {
+  const { left, top, width, height } = cssFrame(frame, camera)
+  return (
+    <Plus
+      data-testid='center-mark'
+      aria-hidden='true'
+      className='absolute size-3 -translate-x-1/2 -translate-y-1/2 text-[var(--canvas-selection)] opacity-50'
+      style={{ left: left + width / 2, top: top + height / 2 }}
+    />
   )
 }
 
