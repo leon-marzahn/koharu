@@ -983,6 +983,93 @@ describe('greenfield editor', () => {
     expect(screen.queryByTestId('region-region-1')).not.toBeInTheDocument()
   })
 
+  describe('region delete and draw', () => {
+    const setup = () => {
+      installProject()
+      const page = queryClient.getQueryData(pageKey) as Parameters<typeof CanvasOverlay>[0]['page']
+      const region = {
+        id: 'region-1',
+        parent: null,
+        kind: 'dev.koharu.region.text',
+        label: null,
+        geometry: {
+          points: [
+            { x: 10, y: 10 },
+            { x: 60, y: 10 },
+            { x: 60, y: 40 },
+            { x: 10, y: 40 },
+          ],
+        },
+      } as unknown as Parameters<typeof CanvasOverlay>[0]['page']['regions'][number]
+      const props = {
+        page: { ...page, regions: [region] },
+        camera: { zoom: 1, translation: [0, 0] as [number, number], fitted: false },
+        selected: [],
+        hovered: null,
+        frames: {},
+        previews: {},
+        draft: null,
+        cursor: null,
+        brushSize: 10,
+        showBrushCursor: false,
+        onTransformStart: vi.fn(),
+        onTransformFrame: vi.fn(),
+        onTransformEnd: vi.fn(),
+      }
+      useKoharuStore.setState({ showRegions: true })
+      render(
+        <TooltipProvider>
+          <ToolBar />
+          <CanvasOverlay {...props} />
+        </TooltipProvider>,
+      )
+      return page
+    }
+
+    it('deletes the selected region with the Delete key and the delete control', async () => {
+      const user = userEvent.setup()
+      setup()
+      const remove = vi.spyOn(commands, 'deleteRegions').mockResolvedValue(null)
+      await user.click(screen.getByTestId('region-region-1'))
+      fireEvent.keyDown(window, { key: 'Delete' })
+      expect(remove).toHaveBeenCalledWith(['region-1'])
+
+      // The key press deselected the region; select it again for the control.
+      await user.click(screen.getByTestId('region-region-1'))
+      await user.click(screen.getByRole('button', { name: 'Delete region', hidden: true }))
+      expect(remove).toHaveBeenCalledTimes(2)
+    })
+
+    it('draws a region then runs OCR and translation on just that region', async () => {
+      const user = userEvent.setup()
+      const page = setup()
+      const draw = vi.spyOn(commands, 'drawRegion').mockResolvedValue('region-new')
+      const process = vi.spyOn(commands, 'process').mockResolvedValue('job-1')
+      await user.click(screen.getByRole('button', { name: 'Draw region' }))
+      const surface = screen.getByTestId('region-draw-surface')
+      fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 5, clientY: 6 })
+      fireEvent.pointerMove(surface, { pointerId: 1, clientX: 25, clientY: 36 })
+      fireEvent.pointerUp(surface, { pointerId: 1, clientX: 25, clientY: 36 })
+      await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(1))
+      expect(draw).toHaveBeenCalledWith(page.id, { x: 5, y: 6 }, { x: 25, y: 36 })
+      expect(process).toHaveBeenCalledWith(
+        { scope: 'entities', value: ['region-new'] },
+        { operation: 'stages', stages: ['ocr', 'translation'] },
+      )
+    })
+
+    it('ignores a draw gesture that did not move', async () => {
+      const user = userEvent.setup()
+      setup()
+      const draw = vi.spyOn(commands, 'drawRegion').mockResolvedValue('region-new')
+      await user.click(screen.getByRole('button', { name: 'Draw region' }))
+      const surface = screen.getByTestId('region-draw-surface')
+      fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 5, clientY: 6 })
+      fireEvent.pointerUp(surface, { pointerId: 1, clientX: 5, clientY: 6 })
+      expect(draw).not.toHaveBeenCalled()
+    })
+  })
+
   it('adjusts brush size from the toolbar popover', async () => {
     const user = userEvent.setup()
     installProject()

@@ -309,6 +309,61 @@ pub(crate) async fn set_region_geometry(
 
 #[tracing::instrument(
     target = "koharu_metrics",
+    name = "regions_deleted",
+    skip_all,
+    fields(origin = "user", entity_count = regions.len()),
+)]
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn delete_regions(
+    regions: Vec<EntityId>,
+    desktop: State<'_, Desktop>,
+    project: State<'_, CurrentProject>,
+    canvas_channel: State<'_, CanvasChannel>,
+) -> Result<(), Error> {
+    let (commit, page) = {
+        let mut project = project.project.lock().await;
+        let project = project.as_mut().context("no project is open")?;
+        let commit = project.delete_regions(regions).await?;
+        project.record_commit(&commit);
+        (commit, project.active_page())
+    };
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas_channel.channel.publish(canvas);
+    Ok(())
+}
+
+/// Returns the new region so the caller can scope OCR and translation to it.
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "region_drawn",
+    skip_all,
+    fields(origin = "user")
+)]
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn draw_region(
+    page: EntityId,
+    from: Point,
+    to: Point,
+    desktop: State<'_, Desktop>,
+    project: State<'_, CurrentProject>,
+    canvas_channel: State<'_, CanvasChannel>,
+) -> Result<EntityId, Error> {
+    let (commit, region, active) = {
+        let mut project = project.project.lock().await;
+        let project = project.as_mut().context("no project is open")?;
+        let (commit, region) = project.add_text_region(page, from, to).await?;
+        project.record_commit(&commit);
+        (commit, region, project.active_page())
+    };
+    let canvas = synchronize_canvas(&desktop, &commit, active).await?;
+    canvas_channel.channel.publish(canvas);
+    Ok(region)
+}
+
+#[tracing::instrument(
+    target = "koharu_metrics",
     name = "visibility_edited",
     skip_all,
     fields(origin = "user", entity_count = layers.len()),

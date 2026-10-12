@@ -548,6 +548,8 @@
   },
   "tools": {
     "regions": "区域",
+    "drawRegion": "绘制区域",
+    "deleteRegion": "删除区域",
     "brushSize": "画笔大小",
     "brushSizeInput": "画笔大小",
     "brushSizePixels": "画笔大小：{{size}} 像素",

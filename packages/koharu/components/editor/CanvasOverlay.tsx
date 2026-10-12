@@ -124,7 +124,9 @@ export function CanvasOverlay({
         )
       })}
 
-      {showRegions && <RegionsOverlay regions={page.regions} camera={camera} container={root} />}
+      {showRegions && (
+        <RegionsOverlay page={page.id} regions={page.regions} camera={camera} container={root} />
+      )}
       {draft && <DraftOverlay frame={draft} camera={camera} />}
       {snapGuide && <SnapGuideLines guide={snapGuide} camera={camera} />}
       {showBrushCursor && cursor && (

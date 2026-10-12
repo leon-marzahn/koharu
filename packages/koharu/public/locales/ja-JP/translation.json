@@ -548,6 +548,8 @@
   },
   "tools": {
     "regions": "領域",
+    "drawRegion": "領域を描く",
+    "deleteRegion": "領域を削除",
     "brushSize": "ブラシサイズ",
     "brushSizeInput": "ブラシサイズ",
     "brushSizePixels": "ブラシサイズ: {{size}}ピクセル",

@@ -1,12 +1,22 @@
 'use client'
 
-import { useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { Trash2 } from 'lucide-react'
+import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { SelectionControls } from '@/components/editor/SelectionControls'
 import { call } from '@/lib/backend'
 import { cssFrame, pagePoint, type Camera } from '@/lib/geometry'
 import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
-import { commands, type AnalysisRegion, type EntityId, type Frame } from '@koharu/bridge/protocol'
+import { useKoharuStore } from '@/lib/store'
+import {
+  commands,
+  type AnalysisRegion,
+  type EntityId,
+  type Frame,
+  type Point,
+} from '@koharu/bridge/protocol'
+import { Button } from '@koharu/ui/components/button'
 
 // Detection regions are edited as their axis-aligned bounds (angle 0 until rotated).
 // Overlay-only DOM: it is never drawn into the WebGPU canvas, so it cannot reach export.
@@ -42,10 +52,12 @@ interface Drag {
 }
 
 export function RegionsOverlay({
+  page,
   regions,
   camera,
   container,
 }: {
+  page: EntityId
   regions: AnalysisRegion[]
   camera: Camera
   container: RefObject<HTMLDivElement | null>
@@ -54,6 +66,53 @@ export function RegionsOverlay({
   const [preview, setPreview] = useState<Frame | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   const region = regions.find((r) => r.id === selected)
+  const { t } = useTranslation()
+  const drawing = useKoharuStore((state) => state.drawRegion)
+  const selectLayers = useKoharuStore((state) => state.selectLayers)
+  const [sketch, setSketch] = useState<{ pointer: number; from: Point; to: Point } | null>(null)
+
+  // Deleting a region also deletes the text box recognized from it (one undo step).
+  const remove = (id: EntityId) => {
+    setSelected(null)
+    void call(commands.deleteRegions, [id])
+      .then(() => refresh(projectKey, pagesKey, pageKey))
+      .catch(() => undefined)
+  }
+
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      )
+        return
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return
+      event.preventDefault()
+      remove(selected)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected])
+
+  // Draw a user region, then OCR + translate only that region (entity scope follows its
+  // RecognizedFrom/FitsTo relations, so neighbouring regions and text are never reprocessed).
+  const finishSketch = (from: Point, to: Point) => {
+    if (Math.abs(from.x - to.x) < 2 || Math.abs(from.y - to.y) < 2) return
+    void call(commands.drawRegion, page, from, to)
+      .then(async (id) => {
+        await refresh(projectKey, pagesKey, pageKey)
+        await call(
+          commands.process,
+          { scope: 'entities', value: [id] },
+          { operation: 'stages', stages: ['ocr', 'translation'] },
+        )
+      })
+      .catch(() => undefined)
+  }
 
   // Keep the preview until the refreshed page arrives, otherwise the region snaps back to
   // its stale geometry while the attached text has already moved.
@@ -92,6 +151,7 @@ export function RegionsOverlay({
               if (event.button !== 0) return
               event.stopPropagation()
               setSelected(item.id)
+              selectLayers([]) // so Delete targets the region, not a selected text layer
               const start = point(event)
               if (!start) return
               event.currentTarget.setPointerCapture(event.pointerId)
@@ -114,7 +174,68 @@ export function RegionsOverlay({
           />
         )
       })}
-      {region && (
+      {region && !drawing && (
+        <Button
+          type='button'
+          variant='secondary'
+          size='icon'
+          aria-label={t('tools.deleteRegion')}
+          className='pointer-events-auto absolute size-6 -translate-y-full'
+          style={{
+            left: cssFrame(preview ?? regionFrame(region), camera).left,
+            top: cssFrame(preview ?? regionFrame(region), camera).top,
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => remove(region.id)}
+        >
+          <Trash2 className='size-3.5' />
+        </Button>
+      )}
+      {drawing && (
+        <div
+          data-testid='region-draw-surface'
+          className='pointer-events-auto absolute inset-0 cursor-crosshair touch-none'
+          onPointerDown={(event) => {
+            if (event.button !== 0) return
+            event.stopPropagation()
+            const from = point(event)
+            if (!from) return
+            event.currentTarget.setPointerCapture?.(event.pointerId)
+            setSketch({ pointer: event.pointerId, from, to: from })
+          }}
+          onPointerMove={(event) => {
+            const to = point(event)
+            if (sketch && sketch.pointer === event.pointerId && to) setSketch({ ...sketch, to })
+          }}
+          onPointerUp={(event) => {
+            if (!sketch || sketch.pointer !== event.pointerId) return
+            const to = point(event) ?? sketch.to
+            setSketch(null)
+            finishSketch(sketch.from, to)
+          }}
+          onPointerCancel={() => setSketch(null)}
+        >
+          {sketch && (
+            <div
+              className='absolute box-border border border-dashed border-[var(--canvas-region-stroke)]'
+              style={{
+                ...cssFrame(
+                  {
+                    x: Math.min(sketch.from.x, sketch.to.x),
+                    y: Math.min(sketch.from.y, sketch.to.y),
+                    width: Math.abs(sketch.from.x - sketch.to.x),
+                    height: Math.abs(sketch.from.y - sketch.to.y),
+                    angle_degrees: 0,
+                  },
+                  camera,
+                ),
+                transform: undefined,
+              }}
+            />
+          )}
+        </div>
+      )}
+      {region && !drawing && (
         <SelectionControls
           container={container}
           element={region.id}

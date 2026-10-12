@@ -548,6 +548,8 @@
   },
   "tools": {
     "regions": "Области",
+    "drawRegion": "Нарисовать область",
+    "deleteRegion": "Удалить область",
     "brushSize": "Размер кисти",
     "brushSizeInput": "Размер кисти",
     "brushSizePixels": "Размер кисти: {{size}} пикс.",

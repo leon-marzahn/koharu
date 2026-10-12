@@ -4,10 +4,10 @@
 
 **Blocked by:** 13 Regions view: show, move, resize
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Deleting a region cascades to its text box and is undoable
-- [ ] Drawing a region creates a user-origin text region
-- [ ] OCR and translation run only on the drawn region
-- [ ] Other regions and text are untouched
-- [ ] Stage and component tests cover the above
+- [x] Deleting a region cascades to its text box and is undoable
+- [x] Drawing a region creates a user-origin text region
+- [x] OCR and translation run only on the drawn region
+- [x] Other regions and text are untouched
+- [x] Stage and component tests cover the above

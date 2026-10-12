@@ -548,6 +548,8 @@
   },
   "tools": {
     "regions": "Bölgeler",
+    "drawRegion": "Bölge çiz",
+    "deleteRegion": "Bölgeyi sil",
     "brushSize": "Fırça boyutu",
     "brushSizeInput": "Fırça boyutu",
     "brushSizePixels": "Fırça boyutu: {{size}} piksel",

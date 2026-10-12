@@ -10,6 +10,7 @@ import {
   Plus,
   ScanSearch,
   Sparkles,
+  SquareDashedMousePointer,
   Type,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -61,6 +62,8 @@ export function ToolBar() {
   const hasBrush = isBrushTool(active)
   const showRegions = useKoharuStore((state) => state.showRegions)
   const toggleRegions = useKoharuStore((state) => state.toggleRegions)
+  const drawRegion = useKoharuStore((state) => state.drawRegion)
+  const toggleDrawRegion = useKoharuStore((state) => state.toggleDrawRegion)
 
   return (
     <aside className='absolute top-3 left-3 z-20 flex w-11 flex-col rounded-2xl border border-border bg-[var(--surface-floating)] p-1 shadow-[var(--shadow-toolrail)]'>
@@ -95,6 +98,28 @@ export function ToolBar() {
       </div>
 
       <div className='flex flex-col items-center border-t border-border/80 py-0.5'>
+        {showRegions && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  disabled={!page}
+                  aria-label={t('tools.drawRegion')}
+                  aria-pressed={drawRegion}
+                  data-active={drawRegion}
+                  className='text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground disabled:opacity-30 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground'
+                  onClick={toggleDrawRegion}
+                />
+              }
+            >
+              <SquareDashedMousePointer className='size-4' />
+            </TooltipTrigger>
+            <TooltipContent side='right'>{t('tools.drawRegion')}</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={

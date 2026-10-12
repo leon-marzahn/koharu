@@ -548,6 +548,8 @@
   },
   "tools": {
     "regions": "Regiões",
+    "drawRegion": "Desenhar região",
+    "deleteRegion": "Excluir região",
     "brushSize": "Tamanho do pincel",
     "brushSizeInput": "Tamanho do pincel",
     "brushSizePixels": "Tamanho do pincel: {{size}} pixels",

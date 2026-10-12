@@ -58,6 +58,9 @@ export const commands = {
 	setContext: (characters: Character[], terms: Term[], proposals: Proposals) => __TAURI_INVOKE<null>("set_context", { characters, terms, proposals }),
 	setGeometry: (updates: GeometryUpdate[]) => __TAURI_INVOKE<null>("set_geometry", { updates: updates.map(i=>({...i,points:i.points==null?i.points:i.points.map(i=>i)})) }),
 	setRegionGeometry: (updates: GeometryUpdate[]) => __TAURI_INVOKE<null>("set_region_geometry", { updates: updates.map(i=>({...i,points:i.points==null?i.points:i.points.map(i=>i)})) }),
+	deleteRegions: (regions: EntityId[]) => __TAURI_INVOKE<null>("delete_regions", { regions }),
+	/**  Returns the new region so the caller can scope OCR and translation to it. */
+	drawRegion: (page: EntityId, from: Point, to: Point) => __TAURI_INVOKE<EntityId>("draw_region", { page, from, to }),
 	setVisibility: (layers: EntityId[], visible: boolean | null, opacity: number | null) => __TAURI_INVOKE<null>("set_visibility", { layers, visible, opacity: opacity==null?opacity:opacity }),
 	deleteLayers: (layers: EntityId[]) => __TAURI_INVOKE<null>("delete_layers", { layers }),
 	moveLayer: (layer: EntityId, parent: EntityId, index: number) => __TAURI_INVOKE<Page>("move_layer", { layer, parent, index }).then((v) => (({...v,layers:v.layers.map(i=>i),regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),

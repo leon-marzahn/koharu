@@ -1,4 +1,8 @@
-use std::{collections::HashSet, io::Cursor, path::PathBuf};
+use std::{
+    collections::{BTreeSet, HashSet},
+    io::Cursor,
+    path::PathBuf,
+};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
@@ -7,9 +11,10 @@ use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Character, CharacterSheet, Commit,
     EntityId, EntityOrigin, FIT_SCALE, FitsTo, FlowsIn, Geometry as SceneGeometry,
     Group as SceneGroup, Origin, PageDraft, Point as ScenePoint, Presents, Proposals,
-    RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion, RemovePolicy,
-    Revision, Session, Snapshot, SourceText as SceneSourceText, StalePage, Term, TermList,
-    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
+    RasterLayer as SceneRasterLayer, RasterLayerKind, RecognizedFrom, Region as SceneRegion,
+    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText, StalePage, Term,
+    TermList, TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
+    TextRegion,
     Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
 use serde::Serialize;
@@ -727,6 +732,99 @@ impl Project {
             Ok(())
         })?;
         self.commit(patch).await
+    }
+
+    /// Deletes regions together with the text recognized from them: a text region left without
+    /// its content would block re-detection, and the box would be invisible to the user.
+    /// Regions without recognized text (bubbles, panels) leave other entities untouched.
+    pub(crate) async fn delete_regions(&mut self, regions: Vec<EntityId>) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let mut doomed = BTreeSet::new();
+        for region in regions {
+            snapshot
+                .component::<SceneRegion>(region)?
+                .context("not a detection region")?;
+            doomed.insert(region);
+            doomed.extend(
+                snapshot
+                    .relations_to_as::<FitsTo>(region)
+                    .map(|r| r.value().source),
+            );
+            for relation in snapshot.relations_to_as::<RecognizedFrom>(region) {
+                let content = relation.value().source;
+                doomed.insert(content);
+                doomed.extend(
+                    snapshot
+                        .relations_to_as::<Presents>(content)
+                        .map(|r| r.value().source),
+                );
+            }
+        }
+        let patch = snapshot.patch(|edit| {
+            for id in doomed {
+                edit.remove_entity(id, RemovePolicy::Cascade)?;
+            }
+            Ok(())
+        })?;
+        self.commit(patch).await
+    }
+
+    /// Creates a user-origin text region with an empty text box wired the same way detection
+    /// wires it (RecognizedFrom + FitsTo), so OCR and translation can be scoped to the region.
+    pub(crate) async fn add_text_region(
+        &mut self,
+        page: EntityId,
+        a: Point,
+        b: Point,
+    ) -> Result<(Commit, EntityId)> {
+        let (width, height) = ((a.x - b.x).abs(), (a.y - b.y).abs());
+        if !(width.is_finite() && height.is_finite() && width >= 1.0 && height >= 1.0) {
+            bail!("a drawn region needs a non-empty rectangle");
+        }
+        let snapshot = self.snapshot();
+        let mut region = None;
+        let patch = snapshot.patch(|edit| {
+            let id = edit.add_analysis_region::<TextRegion>(
+                page,
+                At::End,
+                &SceneGeometry::rectangle(a.x.min(b.x), a.y.min(b.y), width, height),
+                None,
+            )?;
+            let content = edit.add_text_content(page, At::End)?;
+            let layer = edit.add_text_layer(
+                page,
+                At::End,
+                content,
+                &SceneTextLayout {
+                    origin: Origin::User,
+                    kind: TextLayoutKind::Paragraph,
+                    angle_degrees: None,
+                },
+            )?;
+            edit.set(
+                layer,
+                &SceneTypography {
+                    origin: Origin::User,
+                    preferred_font: None,
+                    font_weight: None,
+                    font_style: None,
+                    size: None,
+                    auto_fit: true,
+                    color: None,
+                    stroke_color: None,
+                    stroke_width: None,
+                    alignment: None,
+                    writing_mode: None,
+                    extensions: Default::default(),
+                },
+            )?;
+            edit.relate::<RecognizedFrom>(content, id)?;
+            edit.relate::<FitsTo>(layer, id)?;
+            region = Some(id);
+            Ok(())
+        })?;
+        let commit = self.commit(patch).await?;
+        Ok((commit, region.context("region was not created")?))
     }
 
     pub(crate) async fn set_visibility(
@@ -1814,6 +1912,117 @@ mod tests {
         project.undo().await.unwrap();
         assert_eq!(points(&project, region)[0].x, 0.0);
         assert_eq!(points(&project, layer)[0].x, 1.0);
+    }
+
+    async fn page_with_text_region(
+        session: &mut Session,
+    ) -> (EntityId, EntityId, EntityId, EntityId, EntityId) {
+        use koharu_scene::{BubbleRegion, Geometry as G, RecognizedFrom, TextRegion};
+        let mut edit = session.snapshot().edit();
+        let page = edit
+            .add_page(PageDraft::new("p", 100.0, 100.0), At::End)
+            .unwrap();
+        let region = edit
+            .add_analysis_region::<TextRegion>(
+                page,
+                At::End,
+                &G::rectangle(0.0, 0.0, 10.0, 10.0),
+                None,
+            )
+            .unwrap();
+        let bubble = edit
+            .add_analysis_region::<BubbleRegion>(
+                page,
+                At::End,
+                &G::rectangle(0.0, 0.0, 50.0, 50.0),
+                None,
+            )
+            .unwrap();
+        let content = edit.add_text_content(page, At::End).unwrap();
+        let layer = edit
+            .add_text_layer(
+                page,
+                At::End,
+                content,
+                &SceneTextLayout {
+                    origin: Origin::User,
+                    kind: TextLayoutKind::Paragraph,
+                    angle_degrees: None,
+                },
+            )
+            .unwrap();
+        edit.relate::<RecognizedFrom>(content, region).unwrap();
+        edit.relate::<FitsTo>(layer, region).unwrap();
+        session.commit(edit.finish().unwrap()).await.unwrap();
+        (page, region, bubble, content, layer)
+    }
+
+    #[tokio::test]
+    async fn deleting_a_region_removes_its_text_and_is_one_undo_step() {
+        let mut session = Session::memory().await.unwrap();
+        let (_, region, bubble, content, layer) = page_with_text_region(&mut session).await;
+        let mut project = Project::new(session, "test".to_owned());
+
+        let commit = project.delete_regions(vec![region]).await.unwrap();
+        project.record_commit(&commit);
+        let snapshot = project.snapshot();
+        for gone in [region, content, layer] {
+            assert!(snapshot.entity(gone).is_err());
+        }
+        assert!(snapshot.entity(bubble).is_ok());
+
+        project.undo().await.unwrap();
+        let snapshot = project.snapshot();
+        for back in [region, content, layer, bubble] {
+            assert!(snapshot.entity(back).is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn deleting_a_bubble_region_leaves_text_untouched() {
+        let mut session = Session::memory().await.unwrap();
+        let (_, region, bubble, content, layer) = page_with_text_region(&mut session).await;
+        let mut project = Project::new(session, "test".to_owned());
+        project.delete_regions(vec![bubble]).await.unwrap();
+        let snapshot = project.snapshot();
+        assert!(snapshot.entity(bubble).is_err());
+        for kept in [region, content, layer] {
+            assert!(snapshot.entity(kept).is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn drawing_a_region_creates_a_user_text_region_with_text_and_undoes() {
+        use koharu_scene::{RecognizedFrom, RegionSpec, TextRegion};
+        let mut session = Session::memory().await.unwrap();
+        let (page, existing, _, _, _) = page_with_text_region(&mut session).await;
+        let mut project = Project::new(session, "test".to_owned());
+        let before = project.snapshot().descendants(page).unwrap().count();
+
+        let (commit, region) = project
+            .add_text_region(page, Point { x: 5.0, y: 6.0 }, Point { x: 25.0, y: 36.0 })
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        let snapshot = project.snapshot();
+        let value = snapshot.component::<SceneRegion>(region).unwrap().unwrap();
+        assert_eq!(value.kind, TextRegion::kind());
+        assert!(matches!(value.origin, Origin::User));
+        assert_eq!(
+            snapshot.relations_to_as::<RecognizedFrom>(region).count(),
+            1
+        );
+        assert_eq!(snapshot.relations_to_as::<FitsTo>(region).count(), 1);
+        assert_eq!(
+            snapshot.relations_to_as::<RecognizedFrom>(existing).count(),
+            1
+        );
+        assert_eq!(snapshot.descendants(page).unwrap().count(), before + 3);
+
+        project.undo().await.unwrap();
+        let snapshot = project.snapshot();
+        assert!(snapshot.entity(region).is_err());
+        assert_eq!(snapshot.descendants(page).unwrap().count(), before);
     }
 
     #[test]

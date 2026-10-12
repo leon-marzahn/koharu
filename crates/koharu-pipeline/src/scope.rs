@@ -229,3 +229,68 @@ pub(crate) fn geometry_extents(geometry: &Geometry) -> Option<(f64, f64, f64, f6
     }
     Some((min_x, min_y, max_x, max_y))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use koharu_scene::{
+        At, Geometry, Origin, PageDraft, Session, TextLayout, TextLayoutKind, TextRegion,
+    };
+
+    /// Drawing a region scopes OCR and translation to `Scope::Entities([region])`: only that
+    /// region's text content and layer may be processed, never a neighbour's.
+    #[tokio::test]
+    async fn entity_scope_on_a_region_covers_only_its_own_text() {
+        let mut session = Session::memory().await.unwrap();
+        let mut edit = session.snapshot().edit();
+        let page = edit
+            .add_page(PageDraft::new("p", 100.0, 100.0), At::End)
+            .unwrap();
+        let mut texts = Vec::new();
+        for x in [0.0, 50.0] {
+            let region = edit
+                .add_analysis_region::<TextRegion>(
+                    page,
+                    At::End,
+                    &Geometry::rectangle(x, 0.0, 10.0, 10.0),
+                    None,
+                )
+                .unwrap();
+            let content = edit.add_text_content(page, At::End).unwrap();
+            let layer = edit
+                .add_text_layer(
+                    page,
+                    At::End,
+                    content,
+                    &TextLayout {
+                        origin: Origin::User,
+                        kind: TextLayoutKind::Paragraph,
+                        angle_degrees: None,
+                    },
+                )
+                .unwrap();
+            edit.relate::<RecognizedFrom>(content, region).unwrap();
+            edit.relate::<FitsTo>(layer, region).unwrap();
+            texts.push((region, content, layer));
+        }
+        let snapshot = session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap()
+            .snapshot;
+
+        let scope = NormalizedScope::new(
+            &snapshot,
+            &Scope::Entities(vec![texts[0].0]),
+            &[Stage::Ocr, Stage::Translation],
+        )
+        .unwrap();
+        let entities = scope.entities().unwrap();
+        for id in [texts[0].0, texts[0].1, texts[0].2] {
+            assert!(entities.contains(&id));
+        }
+        for id in [texts[1].0, texts[1].1, texts[1].2] {
+            assert!(!entities.contains(&id));
+        }
+    }
+}

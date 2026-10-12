@@ -548,6 +548,8 @@
   },
   "tools": {
     "regions": "Regions",
+    "drawRegion": "Draw region",
+    "deleteRegion": "Delete region",
     "brushSize": "Brush size",
     "brushSizeInput": "Brush size",
     "brushSizePixels": "Brush size: {{size}} pixels",

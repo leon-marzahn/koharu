@@ -68,6 +68,7 @@ interface KoharuStore {
   styleClipboard: Typography | null
   tool: CanvasTool
   showRegions: boolean
+  drawRegion: boolean
   brush: CanvasBrush
   inspector: InspectorSection
   processingScope: PipelineScope
@@ -82,6 +83,7 @@ interface KoharuStore {
   selectLayers: (layers: EntityId[]) => void
   setTool: (tool: CanvasTool) => void
   toggleRegions: () => void
+  toggleDrawRegion: () => void
   setBrush: (brush: CanvasBrush) => void
   setShortcut: (action: ShortcutAction, key: string) => void
   requestCanvasFit: () => void
@@ -120,6 +122,7 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   styleClipboard: null,
   tool: 'select',
   showRegions: false,
+  drawRegion: false,
   brush: { diameter: 48, color: '#FFFFFF' },
   inspector: 'copy',
   processingScope: 'selected-pages',
@@ -133,7 +136,8 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   selectLayers: (selectedLayers) => set({ selectedLayers: [...new Set(selectedLayers)] }),
   setTool: (tool) => set({ tool }),
-  toggleRegions: () => set((state) => ({ showRegions: !state.showRegions })),
+  toggleRegions: () => set((state) => ({ showRegions: !state.showRegions, drawRegion: false })),
+  toggleDrawRegion: () => set((state) => ({ drawRegion: !state.drawRegion })),
   setBrush: (brush) => set({ brush }),
   setShortcut: (action, key) =>
     set((state) => ({
