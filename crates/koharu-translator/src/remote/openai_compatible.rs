@@ -1,8 +1,10 @@
 // https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
 
+use std::collections::BTreeMap;
+
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
-use reqwest::Client;
+use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -18,6 +20,8 @@ const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 #[serde(default)]
 pub struct OpenAiCompatibleConfig {
     pub base_url: Option<Url>,
+    /// Extra request headers sent with every request, e.g. router flags.
+    pub headers: BTreeMap<String, String>,
 }
 
 impl Default for OpenAiCompatibleConfig {
@@ -26,8 +30,16 @@ impl Default for OpenAiCompatibleConfig {
             base_url: Some(
                 Url::parse(DEFAULT_BASE_URL).expect("default OpenAI-compatible URL is valid"),
             ),
+            headers: BTreeMap::new(),
         }
     }
+}
+
+fn with_headers(mut request: RequestBuilder, config: &OpenAiCompatibleConfig) -> RequestBuilder {
+    for (name, value) in &config.headers {
+        request = request.header(name, value);
+    }
+    request
 }
 
 pub(super) async fn translate(
@@ -78,10 +90,12 @@ pub(super) async fn translate(
                 schema: prompt::output_schema(request.segments.len()),
             },
         },
+        stream: false,
     };
     let http = client
         .post(endpoint(config.base_url.as_ref(), "chat/completions"))
         .json(&body);
+    let http = with_headers(http, config);
     let http = match api_key {
         Some(api_key) => http.bearer_auth(api_key.expose_secret()),
         None => http,
@@ -104,7 +118,10 @@ pub(super) async fn translate(
 
 pub(super) async fn models(client: &Client, config: &OpenAiCompatibleConfig) -> Result<Vec<Model>> {
     let api_key = koharu_secrets::get("openai-compatible")?;
-    let request = client.get(endpoint(config.base_url.as_ref(), "models"));
+    let request = with_headers(
+        client.get(endpoint(config.base_url.as_ref(), "models")),
+        config,
+    );
     let request = match api_key {
         Some(api_key) => request.bearer_auth(api_key.expose_secret()),
         None => request,
@@ -150,6 +167,7 @@ struct ChatRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<&'static str>,
     response_format: ResponseFormat,
+    stream: bool,
 }
 
 #[derive(Serialize)]
@@ -218,6 +236,18 @@ struct ListedModel {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn applies_configured_headers() {
+        let mut config = OpenAiCompatibleConfig::default();
+        config
+            .headers
+            .insert("x-9router-token-saver".into(), "off".into());
+        let request = with_headers(Client::new().get("http://localhost/"), &config)
+            .build()
+            .unwrap();
+        assert_eq!(request.headers()["x-9router-token-saver"], "off");
+    }
+
     use super::*;
 
     #[test]
@@ -257,6 +287,7 @@ mod tests {
                     schema: prompt::output_schema(2),
                 },
             },
+            stream: false,
         };
         let value = serde_json::to_value(body).unwrap();
 

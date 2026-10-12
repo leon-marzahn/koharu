@@ -340,6 +340,8 @@ export type OcrModel = { model: "paddleocr-vl-1.6" } | { model: "manga-ocr" } | 
 
 export type OpenAiCompatibleConfig = {
 	base_url?: string | null,
+	/**  Extra request headers sent with every request, e.g. router flags. */
+	headers?: { [key in string]: string },
 };
 
 export type OpenAiConfig = Record<string, never>;
