@@ -14,6 +14,7 @@ import type {
   StartupState,
   ModelResources,
   PageSize,
+  Typography,
 } from '@koharu/bridge/protocol'
 import { toast } from '@koharu/ui/components/toast'
 
@@ -39,6 +40,14 @@ export type Shortcuts = Record<ShortcutAction, string>
 export type PipelineScope = 'page' | 'selected-pages' | 'project'
 export const pipelineStages: readonly Stage[] = ['detection', 'ocr', 'translation', 'inpainting']
 
+// A copied text box. Deliberately carries no region relation: a paste is always a fresh user layer.
+export interface CopiedBox {
+  source: string | null
+  translation: string | null
+  typography: Typography | null
+  frame: Frame
+}
+
 interface KoharuStore {
   initialized: boolean
   preferences: Preferences | null
@@ -55,6 +64,8 @@ interface KoharuStore {
   layerFrames: Record<EntityId, Frame>
   selectedLayers: EntityId[]
   selectedPages: EntityId[]
+  boxClipboard: { page: EntityId; boxes: CopiedBox[] } | null
+  styleClipboard: Typography | null
   tool: CanvasTool
   showRegions: boolean
   brush: CanvasBrush
@@ -105,6 +116,8 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   layerFrames: {},
   selectedLayers: [],
   selectedPages: [],
+  boxClipboard: null,
+  styleClipboard: null,
   tool: 'select',
   showRegions: false,
   brush: { diameter: 48, color: '#FFFFFF' },

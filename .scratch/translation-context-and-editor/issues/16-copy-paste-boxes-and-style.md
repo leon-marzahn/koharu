@@ -4,11 +4,11 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Box paste creates a user-origin text layer with no region relation
-- [ ] Same-page paste is offset 10 px; cross-page paste keeps position
-- [ ] Style copy excludes text, position and box size
-- [ ] Style paste applies to every selected box and is one undo step
-- [ ] Inspector buttons work and are labelled
-- [ ] Component tests cover the above
+- [x] Box paste creates a user-origin text layer with no region relation
+- [x] Same-page paste is offset 10 px; cross-page paste keeps position
+- [x] Style copy excludes text, position and box size
+- [x] Style paste applies to every selected box and is one undo step
+- [x] Inspector buttons work and are labelled
+- [x] Component tests cover the above

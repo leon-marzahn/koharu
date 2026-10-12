@@ -11,6 +11,8 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  ClipboardPaste,
+  Copy,
   Folder,
   Image as ImageIcon,
   Layers3,
@@ -28,7 +30,9 @@ import { ColorWell } from '@/components/controls/ColorWell'
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
 import { FontPicker } from '@/components/controls/FontPicker'
 import { call } from '@/lib/backend'
+import { copyStyle, pasteStyle } from '@/lib/clipboard'
 import {
+  defaultTypography,
   expandLayerSelection,
   isGroupLayer,
   isLockedLayer,
@@ -95,19 +99,6 @@ const defaultFont: FontFamily = {
   ],
 }
 
-const defaultTypography: Typography = {
-  preferred_font: null,
-  font_weight: 400,
-  font_style: 'normal',
-  size: null,
-  auto_fit: true,
-  color: [0, 0, 0, 255],
-  stroke_color: [255, 255, 255, 255],
-  stroke_width: 0,
-  alignment: null,
-  writing_mode: null,
-}
-
 export function Inspector() {
   const { t } = useTranslation()
   return (
@@ -168,6 +159,7 @@ function TypeInspector() {
       ? draft.typography
       : (current?.typography ?? defaultTypography)
   const disabled = !current
+  const styleClipboard = useKoharuStore((state) => state.styleClipboard)
   const families = useMemo(() => {
     const available = availableFonts ?? []
     return available.some(
@@ -196,6 +188,28 @@ function TypeInspector() {
   return (
     <div className='min-w-0 p-2' data-testid='type-inspector' aria-disabled={disabled}>
       <div className='grid min-w-0 gap-1.5'>
+        <div className='flex gap-1.5'>
+          <Button
+            type='button'
+            variant='outline'
+            size='xs'
+            disabled={disabled}
+            onClick={() => page && copyStyle(page)}
+          >
+            <Copy />
+            {t('inspector.copyStyle')}
+          </Button>
+          <Button
+            type='button'
+            variant='outline'
+            size='xs'
+            disabled={disabled || !styleClipboard}
+            onClick={() => page && void pasteStyle(page).catch(() => undefined)}
+          >
+            <ClipboardPaste />
+            {t('inspector.pasteStyle')}
+          </Button>
+        </div>
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] gap-1.5'>
           <InspectorField label={t('inspector.font')}>
             <FontPicker

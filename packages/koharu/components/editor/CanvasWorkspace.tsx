@@ -10,6 +10,7 @@ import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
 import { useCanvas } from '@/components/editor/useCanvas'
 import { call } from '@/lib/backend'
+import { copyBoxes, copyStyle, pasteBoxes, pasteStyle } from '@/lib/clipboard'
 import { expandLayerSelection } from '@/lib/document'
 import {
   controlFrame,
@@ -457,6 +458,34 @@ export function CanvasWorkspace() {
     window.addEventListener('keydown', down)
     return () => window.removeEventListener('keydown', down)
   })
+
+  // Cmd/Ctrl+C/V copy boxes; adding Shift copies style. Text fields keep native copy/paste.
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase()
+      const target = event.target
+      if (
+        (key !== 'c' && key !== 'v') ||
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        !page ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      )
+        return
+      event.preventDefault()
+      const copy = key === 'c'
+      if (event.shiftKey) {
+        if (copy) copyStyle(page)
+        else void pasteStyle(page).catch(() => undefined)
+      } else if (copy) copyBoxes(page)
+      else void pasteBoxes(page).catch(() => undefined)
+    }
+    window.addEventListener('keydown', down)
+    return () => window.removeEventListener('keydown', down)
+  }, [page])
 
   const moveGesture = (
     pointer: number,
