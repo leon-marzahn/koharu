@@ -318,6 +318,35 @@ function TypeInspector() {
           </InspectorField>
         </div>
 
+        {typography.auto_fit && (
+          <InspectorField label={t('inspector.fitScale')}>
+            <NumberField
+              name='fit-scale'
+              className='min-w-0'
+              disabled={disabled}
+              value={Math.round((typography.fit_scale ?? 1) * 100)}
+              min={50}
+              max={300}
+              step={5}
+              onValueChange={(next) => {
+                if (next !== null && next >= 50 && next <= 300) {
+                  apply((value) => ({ ...value, fit_scale: next / 100 }))
+                }
+              }}
+            >
+              <NumberFieldGroup>
+                <NumberFieldDecrement aria-label={t('inspector.decreaseFitScale')}>
+                  <Minus />
+                </NumberFieldDecrement>
+                <NumberFieldInput data-testid='fit-scale' aria-label={t('inspector.fitScale')} />
+                <NumberFieldIncrement aria-label={t('inspector.increaseFitScale')}>
+                  <Plus />
+                </NumberFieldIncrement>
+              </NumberFieldGroup>
+            </NumberField>
+          </InspectorField>
+        )}
+
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(6.5rem,1fr)] gap-1.5'>
           <InspectorField label={t('inspector.alignment')}>
             <div className='grid h-6 grid-cols-3 rounded-md border border-input bg-background p-px'>

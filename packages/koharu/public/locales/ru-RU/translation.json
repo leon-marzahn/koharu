@@ -203,7 +203,10 @@
     "unplaced": "Не размещено",
     "vertical": "Вертикально",
     "weight": "Насыщенность",
-    "width": "Ширина"
+    "width": "Ширина",
+    "fitScale": "Масштаб подгонки (%)",
+    "decreaseFitScale": "Уменьшить масштаб",
+    "increaseFitScale": "Увеличить масштаб"
   },
   "languages": {
     "en-US": "English",

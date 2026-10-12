@@ -203,7 +203,10 @@
     "unplaced": "Unplaced",
     "vertical": "Vertical",
     "weight": "Weight",
-    "width": "Width"
+    "width": "Width",
+    "fitScale": "Fit scale (%)",
+    "decreaseFitScale": "Decrease fit scale",
+    "increaseFitScale": "Increase fit scale"
   },
   "languages": {
     "en-US": "English",

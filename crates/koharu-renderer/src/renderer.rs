@@ -811,6 +811,12 @@ impl Traversal<'_> {
             font_size: typography.as_ref().and_then(|value| value.size),
             minimum_font_size: MINIMUM_FONT_SIZE,
             auto_fit: typography.as_ref().is_none_or(|value| value.auto_fit),
+            fit_scale: typography
+                .as_ref()
+                .and_then(|value| value.extensions.get(koharu_scene::FIT_SCALE))
+                .and_then(|value| value.parse::<f32>().ok())
+                .filter(|scale| scale.is_finite())
+                .map_or(1.0, |scale| scale.clamp(0.5, 3.0)),
             alignment,
             writing_mode,
             foreground_color: typography

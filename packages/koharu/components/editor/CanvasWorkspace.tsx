@@ -1,5 +1,6 @@
 'use client'
 
+import type { Typography } from '@koharu/bridge/protocol'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -82,6 +83,17 @@ interface CanvasView {
 interface StrokeUpdate {
   kind: 'paint' | 'erase' | 'inpaint'
   points: Point[]
+}
+
+const clampStep = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+/** Cmd+Up/Down: auto-fit boxes step the fit scale by 5% (Shift: 25%); fixed ones the size by 1 (Shift: 10). */
+export function stepTypography(typography: Typography, dir: number, big: boolean): Typography {
+  if (typography.auto_fit) {
+    const percent = (typography.fit_scale ?? 1) * 100 + dir * (big ? 25 : 5)
+    return { ...typography, fit_scale: Math.round(clampStep(percent, 50, 300)) / 100 }
+  }
+  return { ...typography, size: clampStep((typography.size ?? 24) + dir * (big ? 10 : 1), 1, 300) }
 }
 
 export function CanvasWorkspace() {
@@ -488,15 +500,7 @@ export function CanvasWorkspace() {
           ? [
               {
                 layer: layer.id,
-                // Same fallbacks as the Inspector: auto-fit boxes carry no explicit size.
-                typography: {
-                  ...(layer.typography ?? defaultTypography),
-                  size: Math.min(
-                    300,
-                    Math.max(1, (layer.typography?.size ?? 24) + dir * (event.shiftKey ? 10 : 1)),
-                  ),
-                  auto_fit: false,
-                },
+                typography: stepTypography(layer.typography ?? defaultTypography, dir, event.shiftKey),
               },
             ]
           : [],

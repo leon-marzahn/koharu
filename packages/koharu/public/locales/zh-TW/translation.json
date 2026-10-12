@@ -203,7 +203,10 @@
     "unplaced": "未放置",
     "vertical": "直排",
     "weight": "字重",
-    "width": "寬度"
+    "width": "寬度",
+    "fitScale": "自動縮放 (%)",
+    "decreaseFitScale": "減小縮放",
+    "increaseFitScale": "增大縮放"
   },
   "languages": {
     "en-US": "English",

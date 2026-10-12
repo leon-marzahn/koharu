@@ -5,12 +5,12 @@ use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_desktop::Frame;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Character, CharacterSheet, Commit,
-    EntityId, EntityOrigin, FitsTo, FlowsIn, Geometry as SceneGeometry, Group as SceneGroup,
-    Origin, PageDraft, Point as ScenePoint, Presents, Proposals, RasterLayer as SceneRasterLayer,
-    RasterLayerKind, Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
-    SourceText as SceneSourceText, Term, TermList, TextGroup as SceneTextGroup,
-    TextLayout as SceneTextLayout, TextLayoutKind, Translation as SceneTranslation,
-    Typography as SceneTypography, Visibility as SceneVisibility,
+    EntityId, EntityOrigin, FIT_SCALE, FitsTo, FlowsIn, Geometry as SceneGeometry,
+    Group as SceneGroup, Origin, PageDraft, Point as ScenePoint, Presents, Proposals,
+    RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion, RemovePolicy,
+    Revision, Session, Snapshot, SourceText as SceneSourceText, Term, TermList,
+    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
+    Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
@@ -168,6 +168,9 @@ pub struct Typography {
     pub font_style: Option<koharu_scene::FontStyle>,
     pub size: Option<f32>,
     pub auto_fit: bool,
+    /// Auto-fit size multiplier (1 = fit the balloon exactly).
+    #[serde(default)]
+    pub fit_scale: Option<f32>,
     pub color: Option<[u8; 4]>,
     pub stroke_color: Option<[u8; 4]>,
     pub stroke_width: Option<f32>,
@@ -607,7 +610,14 @@ impl Project {
                         stroke_width: update.typography.stroke_width,
                         alignment: update.typography.alignment,
                         writing_mode: update.typography.writing_mode,
-                        extensions: Default::default(),
+                        extensions: update
+                            .typography
+                            .fit_scale
+                            .filter(|scale| scale.is_finite() && (*scale - 1.0).abs() > 1e-3)
+                            .map(|scale| {
+                                [(FIT_SCALE.to_owned(), scale.clamp(0.5, 3.0).to_string())].into()
+                            })
+                            .unwrap_or_default(),
                     },
                 )?;
             }
@@ -1203,6 +1213,10 @@ impl Project {
             font_style: typography.font_style,
             size: typography.size,
             auto_fit: typography.auto_fit,
+            fit_scale: typography
+                .extensions
+                .get(FIT_SCALE)
+                .and_then(|value| value.parse().ok()),
             color: typography.color,
             stroke_color: typography.stroke_color,
             stroke_width: typography.stroke_width,

@@ -651,7 +651,7 @@ describe('canvas interaction adapter', () => {
         ...page,
         layers: page.layers.map((value) => ({
           ...value,
-          typography: { size: 20, auto_fit: true },
+          typography: { size: 20, auto_fit: false },
         })),
       }))
       const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
@@ -671,7 +671,7 @@ describe('canvas interaction adapter', () => {
       ])
     })
 
-    it('Cmd+Up steps boxes without explicit typography from the 24 px default', async () => {
+    it('Cmd+Up on an auto-fit box steps the fit scale and keeps auto-fit', async () => {
       installText()
       queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
         ...page,
@@ -684,7 +684,10 @@ describe('canvas interaction adapter', () => {
       fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true })
 
       expect(setTypography).toHaveBeenCalledWith([
-        { layer: 'element', typography: expect.objectContaining({ size: 25, auto_fit: false }) },
+        {
+          layer: 'element',
+          typography: expect.objectContaining({ fit_scale: 1.05, auto_fit: true }),
+        },
       ])
     })
 

@@ -203,7 +203,10 @@
     "unplaced": "배치되지 않음",
     "vertical": "세로쓰기",
     "weight": "굵기",
-    "width": "너비"
+    "width": "너비",
+    "fitScale": "맞춤 배율 (%)",
+    "decreaseFitScale": "배율 줄이기",
+    "increaseFitScale": "배율 늘리기"
   },
   "languages": {
     "en-US": "English",

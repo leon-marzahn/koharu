@@ -32,6 +32,8 @@ pub(crate) struct TextNodeDescriptor {
     pub(crate) font_size: Option<f32>,
     pub(crate) minimum_font_size: f32,
     pub(crate) auto_fit: bool,
+    /// Multiplier on the auto-fit size; >1 lets text spill past the balloon outline.
+    pub(crate) fit_scale: f32,
     pub(crate) alignment: TextAlign,
     pub(crate) writing_mode: WritingMode,
     pub(crate) foreground_color: [u8; 4],
@@ -225,19 +227,31 @@ impl TextRenderer {
         if is_bubble_text && descriptor.writing_mode == WritingMode::Horizontal {
             layout = layout.with_hyphenation_policy(HyphenationPolicy::LastResort);
         }
-        let layout = if descriptor.auto_fit && !descriptor.point_text {
+        let fitting = descriptor.auto_fit && !descriptor.point_text;
+        let sized = if fitting {
             layout
+                .clone()
                 .with_max_font_size(maximum)
                 .with_min_font_size(minimum)
         } else {
-            layout.with_font_size(descriptor.font_size.unwrap_or(maximum))
+            layout
+                .clone()
+                .with_font_size(descriptor.font_size.unwrap_or(maximum))
         };
-        let layout = self
-            .layout(&layout, &descriptor.text)
-            .map_err(|source| Error::Layout {
-                entity: descriptor.entity,
-                source,
-            })?;
+        let layout_error = |source| Error::Layout {
+            entity: descriptor.entity,
+            source,
+        };
+        let mut layout = self
+            .layout(&sized, &descriptor.text)
+            .map_err(layout_error)?;
+        if fitting && (descriptor.fit_scale - 1.0).abs() > f32::EPSILON {
+            // Re-lay at the scaled fitted size inside the same frame.
+            let scaled = layout.font_size * descriptor.fit_scale;
+            layout = self
+                .layout(&sized.with_font_size(scaled), &descriptor.text)
+                .map_err(layout_error)?;
+        }
         let (mut x, mut y) = if descriptor.point_text {
             (bounds.x, bounds.y)
         } else {
@@ -460,6 +474,7 @@ mod tests {
             font_size: Some(6.0),
             minimum_font_size: 9.0,
             auto_fit: true,
+            fit_scale: 1.0,
             alignment: TextAlign::Center,
             writing_mode: WritingMode::Horizontal,
             foreground_color: [0, 0, 0, 255],
@@ -479,6 +494,51 @@ mod tests {
 
         assert_eq!(automatic_maximum(&descriptor, bounds, false), 24.0);
         assert_eq!(automatic_maximum(&descriptor, bounds, true), 240.0);
+    }
+
+    #[tokio::test]
+    async fn fit_scale_multiplies_the_auto_fit_size() {
+        let fonts = crate::fonts::Fonts::new();
+        let family = FontSystem::new().first_font().unwrap().family_name().to_owned();
+        fonts
+            .prepare(&[crate::fonts::FontRequest {
+                family: family.clone(),
+                weight: None,
+                style: None,
+            }])
+            .await
+            .unwrap();
+        let mut descriptor = TextNodeDescriptor {
+            entity: EntityId::new(),
+            text: "Hello there".to_owned(),
+            language: None,
+            width: 200.0,
+            height: 80.0,
+            balloon_contour: None,
+            preferred_font: Some(family.clone()),
+            font_families: vec![family],
+            font_weight: None,
+            font_style: None,
+            font_size: None,
+            minimum_font_size: 6.0,
+            auto_fit: true,
+            fit_scale: 1.0,
+            alignment: TextAlign::Center,
+            writing_mode: WritingMode::Horizontal,
+            foreground_color: [0, 0, 0, 255],
+            stroke: None,
+            line_height: 1.2,
+            letter_spacing: 0.0,
+            word_spacing: 0.0,
+            text_inset: [0.0; 4],
+            point_text: false,
+        };
+        let renderer = TextRenderer::new();
+        let fitted = renderer.render_descriptor(&descriptor, &fonts).unwrap();
+        descriptor.fit_scale = 1.5;
+        let scaled = renderer.render_descriptor(&descriptor, &fonts).unwrap();
+        let ratio = scaled.metadata.font_size / fitted.metadata.font_size;
+        assert!((ratio - 1.5).abs() < 0.01, "ratio {ratio}");
     }
 
     #[test]

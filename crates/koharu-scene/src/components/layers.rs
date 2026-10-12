@@ -113,6 +113,9 @@ pub enum FontStyle {
     Oblique,
 }
 
+/// `Typography::extensions` key: auto-fit size multiplier, e.g. "1.2".
+pub const FIT_SCALE: &str = "dev.koharu.text.fit-scale";
+
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Typography {

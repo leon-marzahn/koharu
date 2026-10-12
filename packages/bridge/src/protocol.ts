@@ -52,7 +52,7 @@ export const commands = {
 	movePage: (page: EntityId, index: number) => __TAURI_INVOKE<null>("move_page", { page, index }),
 	setSourceText: (layer: EntityId, text: string) => __TAURI_INVOKE<null>("set_source_text", { layer, text }),
 	setTranslation: (layer: EntityId, text: string | null) => __TAURI_INVOKE<null>("set_translation", { layer, text }),
-	setTypography: (updates: TypographyUpdate[]) => __TAURI_INVOKE<null>("set_typography", { updates: updates.map(i=>({...i,typography:({...i.typography,size:i.typography.size==null?i.typography.size:i.typography.size,stroke_width:i.typography.stroke_width==null?i.typography.stroke_width:i.typography.stroke_width})})) }),
+	setTypography: (updates: TypographyUpdate[]) => __TAURI_INVOKE<null>("set_typography", { updates: updates.map(i=>({...i,typography:({...i.typography,size:i.typography.size==null?i.typography.size:i.typography.size,fit_scale:i.typography.fit_scale==null?i.typography.fit_scale:i.typography.fit_scale,stroke_width:i.typography.stroke_width==null?i.typography.stroke_width:i.typography.stroke_width})})) }),
 	setCharacters: (characters: Character[]) => __TAURI_INVOKE<null>("set_characters", { characters }),
 	setTerms: (terms: Term[]) => __TAURI_INVOKE<null>("set_terms", { terms }),
 	setContext: (characters: Character[], terms: Term[], proposals: Proposals) => __TAURI_INVOKE<null>("set_context", { characters, terms, proposals }),
@@ -589,6 +589,8 @@ export type Typography = {
 	font_style: FontStyle | null,
 	size: number | null,
 	auto_fit: boolean,
+	/**  Auto-fit size multiplier (1 = fit the balloon exactly). */
+	fit_scale?: number | null,
 	color: [number, number, number, number] | null,
 	stroke_color: [number, number, number, number] | null,
 	stroke_width: number | null,

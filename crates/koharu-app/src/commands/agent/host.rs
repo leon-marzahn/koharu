@@ -357,6 +357,7 @@ impl Host for KoharuHost {
                     font_style: arguments.font_style.map(Into::into),
                     size: arguments.size,
                     auto_fit: arguments.auto_fit,
+                    fit_scale: None,
                     color: arguments.color,
                     stroke_color: arguments.stroke_color,
                     stroke_width: arguments.stroke_width,
