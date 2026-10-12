@@ -501,4 +501,76 @@ describe('canvas interaction adapter', () => {
       angle_degrees: 0,
     })
   })
+
+  describe('keyboard nudge', () => {
+    function installText() {
+      installProject()
+      queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+        ...page,
+        layers: [
+          {
+            type: 'text',
+            id: 'element',
+            parent: 'page',
+            geometry: layer.geometry,
+            angle_degrees: 0,
+            visibility: { visible: true, opacity: 1 },
+            content: {
+              id: 'content',
+              source: { text: 'Source', language: 'en' },
+              translation: { text: 'Rendered', language: null },
+              role: null,
+              source_region: null,
+            },
+            typography: null,
+            layout: 'paragraph',
+            automatic_region: null,
+          },
+        ],
+      }))
+      useKoharuStore.setState({
+        selectedLayers: ['element'],
+        layerFrames: { element: { x: 30, y: 40, width: 50, height: 20, angle_degrees: 0 } },
+      })
+    }
+
+    beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }))
+    afterEach(() => vi.useRealTimers())
+
+    it('moves 1 page pixel, or 10 with Shift, and commits a burst once', async () => {
+      installText()
+      const commit = vi.spyOn(commands, 'commitTransform').mockResolvedValue(2)
+      commit.mockClear()
+      renderWorkspace()
+
+      fireEvent.keyDown(window, { key: 'ArrowRight' })
+      fireEvent.keyDown(window, { key: 'ArrowRight' })
+      fireEvent.keyDown(window, { key: 'ArrowDown', shiftKey: true })
+      expect(commit).not.toHaveBeenCalled()
+      await act(async () => {
+        vi.advanceTimersByTime(1000)
+      })
+
+      expect(commit).toHaveBeenCalledOnce()
+      expect(commit).toHaveBeenCalledWith(1, [
+        { element: 'element', frame: { x: 32, y: 50, width: 50, height: 20, angle_degrees: 0 } },
+      ])
+    })
+
+    it('does nothing while a text field is focused', async () => {
+      installText()
+      const commit = vi.spyOn(commands, 'commitTransform').mockResolvedValue(2)
+      commit.mockClear()
+      renderWorkspace()
+      const input = document.body.appendChild(document.createElement('input'))
+
+      fireEvent.keyDown(input, { key: 'ArrowLeft' })
+      await act(async () => {
+        vi.advanceTimersByTime(1000)
+      })
+
+      expect(commit).not.toHaveBeenCalled()
+      input.remove()
+    })
+  })
 })

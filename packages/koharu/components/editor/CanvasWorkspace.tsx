@@ -405,6 +405,59 @@ export function CanvasWorkspace() {
       return frame ? [{ element: id, frame }] : []
     })
 
+  // A burst of arrow presses previews locally and commits once after an idle window,
+  // so the backend records a single undo step.
+  const nudge = useRef({ originals: [] as TransformFrame[], dx: 0, dy: 0, timer: 0 })
+  useEffect(() => {
+    const arrows: Record<string, [number, number]> = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    }
+    const down = (event: KeyboardEvent) => {
+      const step = arrows[event.key]
+      const target = event.target
+      if (
+        !step ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      )
+        return
+      const burst = nudge.current
+      if (transformActive.current && !burst.timer) return // pointer gesture in progress
+      if (!transformActive.current) {
+        const originals = framesFor(useKoharuStore.getState().selectedLayers)
+        if (!originals.length) return
+        beginTransform(originals)
+        if (!transformActive.current) return
+        Object.assign(burst, { originals, dx: 0, dy: 0 })
+      }
+      event.preventDefault()
+      const scale = event.shiftKey ? 10 : 1
+      burst.dx += step[0] * scale
+      burst.dy += step[1] * scale
+      updateTransform(
+        burst.originals.map(({ element, frame }) => ({
+          element,
+          frame: { ...frame, x: frame.x + burst.dx, y: frame.y + burst.dy },
+        })),
+      )
+      window.clearTimeout(burst.timer)
+      burst.timer = window.setTimeout(() => {
+        burst.timer = 0
+        finishTransform()
+      }, 400)
+    }
+    window.addEventListener('keydown', down)
+    return () => window.removeEventListener('keydown', down)
+  })
+
   const moveGesture = (
     pointer: number,
     samples: ReadonlyArray<{ clientX: number; clientY: number }>,

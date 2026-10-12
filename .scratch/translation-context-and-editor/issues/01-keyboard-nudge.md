@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Arrow and Shift+arrow move the selected box by 1 and 10 page pixels
-- [ ] A burst of nudges undoes in one step
-- [ ] Nudging does nothing while typing in a text field
-- [ ] Component tests cover movement and undo coalescing
+- [x] Arrow and Shift+arrow move the selected box by 1 and 10 page pixels
+- [x] A burst of nudges undoes in one step
+- [x] Nudging does nothing while typing in a text field
+- [x] Component tests cover movement and undo coalescing
