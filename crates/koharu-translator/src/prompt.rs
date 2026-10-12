@@ -147,6 +147,7 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
             Context requirements:
             Use the supplied context only to preserve terminology, character voice, and dialogue continuity.
             Do not translate or return the context entries.
+            Context entries with user_corrected set to true were corrected by the user; treat them as authoritative.
         "}.trim_end());
     }
 
@@ -328,6 +329,17 @@ mod tests {
         assert_eq!(input["context"][0]["translation"], "previous");
         assert_eq!(input["segments"][0]["id"], 0);
         assert_eq!(input["segments"][0]["text"], "new");
+    }
+
+    #[test]
+    fn prompt_payload_flags_user_corrected_context() {
+        let mut line = TranslationContext::new("old", "fixed");
+        line.user_corrected = true;
+        let request = TranslationRequest::new(["new"], Language::English).with_context([line]);
+        let (system, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+        assert_eq!(input["context"][0]["user_corrected"], true);
+        assert!(system.contains("user_corrected"));
     }
 
     #[test]

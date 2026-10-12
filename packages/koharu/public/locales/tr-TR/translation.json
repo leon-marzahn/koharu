@@ -448,6 +448,8 @@
       "modelDescription": "Sağlayıcı etiketleri her modelin nerede çalıştığını gösterir; bağlantılar ayrı yapılandırılır.",
       "modelQuantization": "Model niceleme",
       "output": "Çıktı",
+      "previousPages": "Önceki sayfalar bağlam olarak",
+      "previousPagesDescription": "İpucu olarak kaç önceki çevrilmiş sayfanın gönderileceği. 0 devre dışı bırakır.",
       "quantization": "Niceleme",
       "quantizationDescription": "Daha küçük biçimler daha az bellek kullanır, ancak genellikle kalite düşer.",
       "selectQuantization": "Niceleme seç",

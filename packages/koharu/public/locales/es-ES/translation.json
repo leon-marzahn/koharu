@@ -448,6 +448,8 @@
       "modelDescription": "Las etiquetas de proveedor indican dónde se ejecuta cada modelo; las conexiones se configuran por separado.",
       "modelQuantization": "Cuantización del modelo",
       "output": "Salida",
+      "previousPages": "Páginas anteriores como contexto",
+      "previousPagesDescription": "Cuántas páginas traducidas anteriores se envían como pistas. 0 lo desactiva.",
       "quantization": "Cuantización",
       "quantizationDescription": "Los formatos más pequeños usan menos memoria, normalmente a cambio de calidad.",
       "selectQuantization": "Seleccionar una cuantización",

@@ -448,6 +448,8 @@
       "modelDescription": "プロバイダー名はモデルの実行場所を示します。接続は別途設定します。",
       "modelQuantization": "モデル量子化",
       "output": "出力",
+      "previousPages": "前のページを文脈に使う",
+      "previousPagesDescription": "ヒントとして送信する翻訳済みの前のページ数。0 で無効になります。",
       "quantization": "量子化",
       "quantizationDescription": "小さい形式はメモリ使用量を抑えますが、通常は品質とのトレードオフがあります。",
       "selectQuantization": "量子化方式を選択",

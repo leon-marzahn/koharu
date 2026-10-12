@@ -9,6 +9,7 @@ import { GenerationPreferences } from '@/components/preferences/GenerationPrefer
 import {
   PreferencePage,
   PreferenceRow,
+  NumberField,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
 import { modelKey, orderedLanguageChoices, providerName } from '@/lib/translation'
@@ -156,6 +157,21 @@ export function TranslationPreferences({
             placeholder={t('settings.translation.instructionsPlaceholder')}
             onChange={(event) =>
               onChange({ ...value, instructions: event.currentTarget.value || null })
+            }
+          />
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.translation.previousPages')}
+          description={t('settings.translation.previousPagesDescription')}
+        >
+          <NumberField
+            label={t('settings.translation.previousPages')}
+            value={value.previous_pages}
+            min={0}
+            max={10}
+            step={1}
+            onChange={(pages) =>
+              pages !== null && onChange({ ...value, previous_pages: Math.trunc(pages) })
             }
           />
         </PreferenceRow>

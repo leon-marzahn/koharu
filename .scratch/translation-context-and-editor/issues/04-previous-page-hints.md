@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Hints appear in the translation request in reading order
-- [ ] User-edited translations are what gets sent
-- [ ] Untranslated pages are skipped and not counted
-- [ ] N is configurable and defaults to 2
-- [ ] Prompt-payload and stage tests cover the above
+- [x] Hints appear in the translation request in reading order
+- [x] User-edited translations are what gets sent
+- [x] Untranslated pages are skipped and not counted
+- [x] N is configurable and defaults to 2
+- [x] Prompt-payload and stage tests cover the above

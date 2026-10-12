@@ -448,6 +448,8 @@
       "modelDescription": "提供商标签表示各模型的运行位置；连接需单独配置。",
       "modelQuantization": "模型量化",
       "output": "输出",
+      "previousPages": "以前面的页面作为上下文",
+      "previousPagesDescription": "作为提示发送的已翻译前页数量。设为 0 则关闭。",
       "quantization": "量化",
       "quantizationDescription": "较小的格式占用更少内存，但通常会牺牲一些质量。",
       "selectQuantization": "选择量化方式",

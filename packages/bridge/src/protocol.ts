@@ -505,6 +505,8 @@ export type TranslationConfig = {
 	generation: GenerationConfig,
 	target_language: string,
 	instructions: string | null,
+	/**  How many earlier translated pages to send as continuity hints. */
+	previous_pages: number,
 };
 
 export type TypesettingConfig = {

@@ -55,7 +55,6 @@ impl TranslationRequest {
         self
     }
 
-    #[cfg(test)]
     #[must_use]
     pub fn with_context(mut self, context: impl IntoIterator<Item = TranslationContext>) -> Self {
         self.context = context.into_iter().collect();
@@ -125,6 +124,8 @@ pub(crate) fn encode_image(image: &DynamicImage) -> anyhow::Result<EncodedImage>
 pub struct TranslationContext {
     pub source: String,
     pub translation: String,
+    /// The user wrote or edited this translation, so the model should treat it as authoritative.
+    pub user_corrected: bool,
 }
 
 impl TranslationContext {
@@ -134,6 +135,7 @@ impl TranslationContext {
         Self {
             source: source.into(),
             translation: translation.into(),
+            user_corrected: false,
         }
     }
 }

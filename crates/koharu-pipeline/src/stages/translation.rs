@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_scene::{Authored, LanguageTag, Origin, SourceText, Translation};
-use koharu_translator::{TranslationRequest, Translator};
+use koharu_scene::{Authored, EntityId, LanguageTag, Origin, Snapshot, SourceText, Translation};
+use koharu_translator::{TranslationContext, TranslationRequest, Translator};
 
 use crate::TranslationConfig;
 
@@ -18,6 +18,41 @@ impl Processor {
     pub(super) fn new(config: TranslationConfig, translator: Translator) -> Self {
         Self { config, translator }
     }
+}
+
+/// Source/translation pairs from the last `limit` pages before `page` that have any translation,
+/// in reading order. Uses the current translation, so user edits win and are flagged.
+fn previous_page_hints(
+    scene: &Snapshot,
+    page: EntityId,
+    limit: u32,
+) -> Result<Vec<TranslationContext>> {
+    let mut pages = Vec::new();
+    for candidate in scene.pages().take_while(|candidate| candidate.id() != page) {
+        let mut lines = Vec::new();
+        if let Some(group) = candidate.text_group()? {
+            for layer in group.text_layers()? {
+                let content = layer.content()?;
+                let (Some(source), Some(translation)) = (content.source()?, content.translation()?)
+                else {
+                    continue;
+                };
+                if source.text.value.trim().is_empty() || translation.text.value.trim().is_empty() {
+                    continue;
+                }
+                lines.push(TranslationContext {
+                    source: source.text.value,
+                    translation: translation.text.value,
+                    user_corrected: matches!(translation.text.origin, Origin::User),
+                });
+            }
+        }
+        if !lines.is_empty() {
+            pages.push(lines);
+        }
+    }
+    let skip = pages.len().saturating_sub(limit as usize);
+    Ok(pages.into_iter().skip(skip).flatten().collect())
 }
 
 #[async_trait]
@@ -50,10 +85,18 @@ impl StageProcessor for Processor {
                 }
             }
         }
+        // Every context source (hints today; character sheet, term list later) appends here.
+        let mut context = Vec::new();
+        context.extend(previous_page_hints(
+            &input.scene,
+            input.page,
+            self.config.previous_pages,
+        )?);
         let mut request = TranslationRequest::new(
             targets.iter().map(|(_, source)| source.clone()),
             self.config.target_language,
-        );
+        )
+        .with_context(context);
         if let Some(instructions) = self.config.instructions.as_deref() {
             request = request.with_instructions(instructions);
         }
@@ -95,5 +138,109 @@ impl StageProcessor for Processor {
             )?;
         }
         finish(edit)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use koharu_scene::{At, Authored, PageDraft, Session, TextLayout, TextLayoutKind, Translation};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn hints_use_last_n_translated_pages_in_order_with_user_flag() {
+        let mut session = Session::memory().await.unwrap();
+        let mut pages = Vec::new();
+        let generated = generation(PRODUCER, "test").unwrap();
+        let mut machine = Vec::new();
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                // (source, translation, user-authored) per page; page 2 is untranslated.
+                let rows: [&[(&str, Option<(&str, bool)>)]; 5] = [
+                    &[("a", Some(("A", false)))],
+                    &[("b", Some(("B", true)))],
+                    &[("c", None)],
+                    &[("d", Some(("D", false)))],
+                    &[("e", None)],
+                ];
+                for (index, row) in rows.iter().enumerate() {
+                    let page =
+                        edit.add_page(PageDraft::new(index.to_string(), 1.0, 1.0), At::End)?;
+                    for (source, translation) in *row {
+                        let content = edit.add_text_content(page, At::End)?;
+                        edit.add_text_layer(
+                            page,
+                            At::End,
+                            content,
+                            &TextLayout {
+                                origin: koharu_scene::Origin::User,
+                                kind: TextLayoutKind::Paragraph,
+                                angle_degrees: None,
+                            },
+                        )?;
+                        edit.set(
+                            content,
+                            &SourceText {
+                                text: Authored::user((*source).to_owned()),
+                                language: None,
+                            },
+                        )?;
+                        if let Some((text, user)) = translation {
+                            if *user {
+                                edit.set(
+                                    content,
+                                    &Translation {
+                                        text: Authored::user((*text).to_owned()),
+                                        language: None,
+                                    },
+                                )?;
+                            } else {
+                                machine.push((content, (*text).to_owned()));
+                            }
+                        }
+                    }
+                    pages.push(page);
+                }
+                Ok(())
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        // Plain edits author as the user; generated text needs an edit made as the producer.
+        let mut edit = scene.edit_as(generated);
+        for (content, text) in machine {
+            edit.set(
+                content,
+                &Translation {
+                    text: Authored::generated(text, generation(PRODUCER, "test").unwrap()),
+                    language: None,
+                },
+            )
+            .unwrap();
+        }
+        let scene = session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap()
+            .snapshot;
+        let lines = |page, limit| {
+            previous_page_hints(&scene, page, limit)
+                .unwrap()
+                .into_iter()
+                .map(|hint| (hint.source, hint.translation, hint.user_corrected))
+                .collect::<Vec<_>>()
+        };
+
+        // Untranslated page 2 is skipped and does not use up the window.
+        assert_eq!(
+            lines(pages[4], 2),
+            [
+                ("b".into(), "B".into(), true),
+                ("d".into(), "D".into(), false)
+            ]
+        );
+        assert_eq!(lines(pages[4], 1), [("d".into(), "D".into(), false)]);
+        assert_eq!(lines(pages[4], 0), []);
+        assert_eq!(lines(pages[0], 2), []);
     }
 }

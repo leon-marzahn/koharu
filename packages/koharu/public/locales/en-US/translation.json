@@ -448,6 +448,8 @@
       "modelDescription": "Provider labels identify where each model runs; connections are configured separately.",
       "modelQuantization": "Model quantization",
       "output": "Output",
+      "previousPages": "Previous pages as context",
+      "previousPagesDescription": "How many earlier translated pages are sent as hints. Set 0 to disable.",
       "quantization": "Quantization",
       "quantizationDescription": "Smaller formats use less memory, usually with a quality tradeoff.",
       "selectQuantization": "Select a quantization",

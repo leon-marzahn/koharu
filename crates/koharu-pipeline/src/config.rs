@@ -178,6 +178,8 @@ pub struct TranslationConfig {
     #[specta(type = String)]
     pub target_language: Language,
     pub instructions: Option<String>,
+    /// How many earlier translated pages to send as continuity hints.
+    pub previous_pages: u32,
 }
 
 impl Default for TranslationConfig {
@@ -187,6 +189,7 @@ impl Default for TranslationConfig {
             generation: GenerationConfig::default(),
             target_language: Language::English,
             instructions: None,
+            previous_pages: 2,
         }
     }
 }

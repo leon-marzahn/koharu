@@ -448,6 +448,8 @@
       "modelDescription": "提供者標籤表示各模型的執行位置；連線需另行設定。",
       "modelQuantization": "模型量化",
       "output": "輸出",
+      "previousPages": "以前面的頁面作為上下文",
+      "previousPagesDescription": "作為提示傳送的已翻譯前頁數量。設為 0 則關閉。",
       "quantization": "量化",
       "quantizationDescription": "較小的格式使用較少記憶體，但通常會犧牲一些品質。",
       "selectQuantization": "選擇量化方式",

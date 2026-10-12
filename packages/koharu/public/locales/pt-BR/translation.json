@@ -448,6 +448,8 @@
       "modelDescription": "Os rótulos de provedor indicam onde cada modelo é executado; as conexões são configuradas separadamente.",
       "modelQuantization": "Quantização do modelo",
       "output": "Saída",
+      "previousPages": "Páginas anteriores como contexto",
+      "previousPagesDescription": "Quantas páginas traduzidas anteriores são enviadas como dicas. 0 desativa.",
       "quantization": "Quantização",
       "quantizationDescription": "Formatos menores usam menos memória, geralmente com perda de qualidade.",
       "selectQuantization": "Selecionar uma quantização",
