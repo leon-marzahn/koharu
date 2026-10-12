@@ -5,8 +5,8 @@ use koharu_scene::{
     SourceText, TermList, TermUpdate, Translation,
 };
 use koharu_translator::{
-    TranslationCharacter, TranslationContext, TranslationProposals, TranslationRequest,
-    TranslationTerm, Translator,
+    TranslationCharacter, TranslationCharacterUpdate, TranslationContext, TranslationProposals,
+    TranslationRequest, TranslationTerm, TranslationTermUpdate, Translator,
 };
 
 use crate::TranslationConfig;
@@ -127,15 +127,47 @@ fn known_sources(scene: &Snapshot) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Adds returned proposals as pending entries, dropping any whose source already exists in the
-/// sheet, term list, pending list or rejected list. Returns `None` when nothing is new.
-fn merge_proposals(scene: &Snapshot, new: TranslationProposals) -> Result<Option<Proposals>> {
+/// Adds returned proposals as pending entries. A "new" entry whose source is already approved
+/// becomes an update; one already pending or rejected is dropped. Returns `None` when nothing is new.
+fn merge_proposals(scene: &Snapshot, mut new: TranslationProposals) -> Result<Option<Proposals>> {
     let mut merged = proposals(scene)?;
     let sheet = scene
         .project_component::<CharacterSheet>()?
         .unwrap_or_default();
     let terms = scene.project_component::<TermList>()?.unwrap_or_default();
     let before = merged.clone();
+    // The model only sees terms that appear in the prompt's text, so it re-proposes an existing
+    // entry as new when it learns more about it. Treat those as updates instead of dropping them;
+    // the update path below keeps only the fields that actually changed.
+    let given = |value: String| Some(value).filter(|value| !value.trim().is_empty());
+    let (existing, characters): (Vec<_>, Vec<_>) = new.characters.into_iter().partition(|c| {
+        sheet
+            .characters
+            .iter()
+            .any(|known| known.source_name.trim() == c.source_name.trim())
+    });
+    new.characters = characters;
+    new.character_updates
+        .extend(existing.into_iter().map(|c| TranslationCharacterUpdate {
+            source_name: c.source_name,
+            target_name: given(c.target_name),
+            speech_style: given(c.speech_style),
+            appearance: given(c.appearance),
+            notes: given(c.notes),
+        }));
+    let (existing, new_terms): (Vec<_>, Vec<_>) = new.terms.into_iter().partition(|t| {
+        terms
+            .terms
+            .iter()
+            .any(|known| known.source.trim() == t.source.trim())
+    });
+    new.terms = new_terms;
+    new.term_updates
+        .extend(existing.into_iter().map(|t| TranslationTermUpdate {
+            source: t.source,
+            target: given(t.target),
+            note: given(t.note),
+        }));
     for character in new.characters {
         let source = character.source_name.trim().to_owned();
         let known = |name: &str| name.trim() == source;
@@ -698,5 +730,41 @@ mod tests {
             ..Default::default()
         };
         assert!(merge_proposals(&scene, noop).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn a_new_proposal_for_an_approved_entry_becomes_an_update() {
+        let scene = scene_with(vec![character("a")], vec![term("t")], Proposals::default()).await;
+        let new = TranslationProposals {
+            characters: vec![TranslationCharacter {
+                source_name: "a".into(),
+                notes: "learned more".into(), // empty fields are not updates
+                ..Default::default()
+            }],
+            terms: vec![TranslationTerm {
+                source: "t".into(),
+                note: "both like the band".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let merged = merge_proposals(&scene, new).unwrap().unwrap();
+        assert!(merged.characters.is_empty() && merged.terms.is_empty());
+        assert_eq!(
+            merged.character_updates,
+            [CharacterUpdate {
+                source_name: "a".into(),
+                notes: Some("learned more".into()),
+                ..Default::default()
+            }]
+        );
+        assert_eq!(
+            merged.term_updates,
+            [TermUpdate {
+                source: "t".into(),
+                target: None,
+                note: Some("both like the band".into()),
+            }]
+        );
     }
 }

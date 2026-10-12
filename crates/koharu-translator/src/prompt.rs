@@ -67,7 +67,15 @@ fn proposals(value: &Value) -> TranslationProposals {
             .map(|items| {
                 items
                     .iter()
-                    .filter_map(|item| serde_json::from_value(item.clone()).ok())
+                    .filter_map(|item| {
+                        // Models send `null` for unknown fields even where the schema says
+                        // string; treat it as absent so `#[serde(default)]` applies.
+                        let mut item = item.clone();
+                        if let Value::Object(fields) = &mut item {
+                            fields.retain(|_, value| !value.is_null());
+                        }
+                        serde_json::from_value(item).ok()
+                    })
                     .collect()
             })
             .unwrap_or_default()
@@ -631,6 +639,16 @@ mod tests {
         assert_eq!(translated.proposals.characters[0].target_name, "Alice");
         assert_eq!(translated.proposals.terms.len(), 1);
         assert_eq!(translated.proposals.terms[0].source, "魔王");
+    }
+
+    #[test]
+    fn null_fields_in_a_new_proposal_read_as_empty() {
+        // Real model output: `null` where the schema says string.
+        let response = r#"{"translations":[{"id":0,"text":"hi"}],"proposals":{"characters":[{"source_name":"ヒナ","target_name":"Hina","speech_style":null,"appearance":null,"notes":"x"}],"terms":[{"source":"a","target":"b","note":null}]}}"#;
+        let translated = translations("test", response, &["one".to_owned()]).unwrap();
+        assert_eq!(translated.proposals.characters[0].target_name, "Hina");
+        assert_eq!(translated.proposals.characters[0].appearance, "");
+        assert_eq!(translated.proposals.terms.len(), 1);
     }
 
     #[test]
