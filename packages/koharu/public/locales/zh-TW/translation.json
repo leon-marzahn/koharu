@@ -278,10 +278,15 @@
   },
   "modelPicker": {
     "empty": "沒有可用的模型。",
+    "favourite": "Favourite {{model}}",
+    "favourites": "Favourites",
     "loading": "正在載入模型…",
     "noResults": "沒有符合此搜尋的模型。",
     "search": "搜尋模型",
     "title": "選擇模型",
+    "unavailable": "{{provider}} (unavailable)",
+    "unfavourite": "Remove {{model}} from favourites",
+    "useFavourite": "Use favourite {{model}} from {{provider}}",
     "useModel": "使用 {{provider}} 的 {{model}}"
   },
   "navigator": {

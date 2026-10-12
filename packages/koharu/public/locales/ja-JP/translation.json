@@ -278,10 +278,15 @@
   },
   "modelPicker": {
     "empty": "利用できるモデルがありません。",
+    "favourite": "Favourite {{model}}",
+    "favourites": "Favourites",
     "loading": "モデルを読み込み中…",
     "noResults": "この検索に一致するモデルはありません。",
     "search": "モデルを検索",
     "title": "モデルを選択",
+    "unavailable": "{{provider}} (unavailable)",
+    "unfavourite": "Remove {{model}} from favourites",
+    "useFavourite": "Use favourite {{model}} from {{provider}}",
     "useModel": "{{provider}}の{{model}}を使用"
   },
   "navigator": {

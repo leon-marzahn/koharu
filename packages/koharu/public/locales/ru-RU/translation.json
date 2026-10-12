@@ -278,10 +278,15 @@
   },
   "modelPicker": {
     "empty": "Нет доступных моделей.",
+    "favourite": "Favourite {{model}}",
+    "favourites": "Favourites",
     "loading": "Загрузка моделей…",
     "noResults": "Нет моделей, соответствующих поиску.",
     "search": "Искать модели",
     "title": "Выбрать модель",
+    "unavailable": "{{provider}} (unavailable)",
+    "unfavourite": "Remove {{model}} from favourites",
+    "useFavourite": "Use favourite {{model}} from {{provider}}",
     "useModel": "Использовать {{model}} от {{provider}}"
   },
   "navigator": {

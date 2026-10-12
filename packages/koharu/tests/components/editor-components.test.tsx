@@ -6,6 +6,7 @@ import {
   renderHook,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from 'next-themes'
@@ -38,6 +39,8 @@ import * as canvasRuntime from '@koharu/bridge/canvas'
 import {
   commands,
   type Layer,
+  type Model,
+  type ModelSelection,
   type PageSummary,
   type Preferences,
   type ProjectInfo,
@@ -1595,6 +1598,117 @@ describe('greenfield editor', () => {
     expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
       nextPreferences.pipeline.translation,
     )
+  })
+
+  describe('favourite models', () => {
+    const gemma12: ModelSelection = {
+      provider: 'local',
+      model: 'gemma4-12b-it',
+      quantization: null,
+      vision: true,
+      reasoning: true,
+    }
+    const models: Model[] = [
+      {
+        provider: 'local',
+        model: 'gemma4-e2b-it',
+        name: 'Gemma 4 E2B Instruct',
+        quantizations: [],
+        vision: true,
+        reasoning: true,
+      },
+      {
+        provider: 'local',
+        model: 'gemma4-12b-it',
+        name: 'Gemma 4 12B',
+        quantizations: [],
+        vision: true,
+        reasoning: true,
+      },
+    ]
+    const withFavourites = (favourite_models: ModelSelection[]): Preferences => ({
+      ...preferences,
+      pipeline: {
+        ...preferences.pipeline,
+        translation: { ...preferences.pipeline.translation, favourite_models },
+      },
+    })
+    const openPicker = () => {
+      render(<CanvasCommandBar />)
+      fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
+      fireEvent.click(screen.getByRole('button', { name: /Model Gemma 4 E2B Instruct/ }))
+    }
+    const savedFavourites = () =>
+      useKoharuStore.getState().preferences?.pipeline.translation.favourite_models
+
+    it('stars and unstars a model through the preference save path', async () => {
+      installProject()
+      useKoharuStore.setState({ preferences: withFavourites([]), translationModels: models })
+      const save = vi
+        .spyOn(commands, 'savePreferences')
+        .mockImplementation(async (pipeline) => ({ ...preferences, pipeline }))
+      openPicker()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Favourite Gemma 4 12B' }))
+      await waitFor(() =>
+        expect(save).toHaveBeenCalledWith(
+          withFavourites([gemma12]).pipeline,
+          preferences.providers,
+          preferences.typesetting,
+        ),
+      )
+      await waitFor(() => expect(savedFavourites()).toEqual([gemma12]))
+
+      const group = screen.getByRole('group', { name: 'Favourites' })
+      fireEvent.click(
+        within(group).getByRole('button', { name: 'Remove gemma4-12b-it from favourites' }),
+      )
+      await waitFor(() => expect(savedFavourites()).toEqual([]))
+    })
+
+    it('switches the translation model from a favourite', async () => {
+      installProject()
+      useKoharuStore.setState({
+        preferences: withFavourites([gemma12]),
+        translationModels: models,
+      })
+      const switched = withFavourites([gemma12])
+      switched.pipeline.translation.model = gemma12
+      const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(switched)
+      openPicker()
+
+      const group = screen.getByRole('group', { name: 'Favourites' })
+      fireEvent.click(
+        within(group).getByRole('button', { name: 'Use favourite gemma4-12b-it from Local' }),
+      )
+      await waitFor(() =>
+        expect(save).toHaveBeenCalledWith(
+          switched.pipeline,
+          preferences.providers,
+          preferences.typesetting,
+        ),
+      )
+    })
+
+    it('shows a favourite that is no longer available as disabled', () => {
+      installProject()
+      const gone: ModelSelection = { ...gemma12, model: 'removed-model' }
+      useKoharuStore.setState({ preferences: withFavourites([gone]), translationModels: models })
+      openPicker()
+
+      const group = screen.getByRole('group', { name: 'Favourites' })
+      expect(
+        within(group).getByRole('button', { name: 'Use favourite removed-model from Local' }),
+      ).toBeDisabled()
+    })
+
+    it('leaves the dropdown unchanged without favourites', () => {
+      installProject()
+      useKoharuStore.setState({ preferences: withFavourites([]), translationModels: models })
+      openPicker()
+
+      expect(screen.queryByRole('group', { name: 'Favourites' })).not.toBeInTheDocument()
+    })
   })
 
   it('preserves vision when the runtime selector chooses a text-only model', async () => {

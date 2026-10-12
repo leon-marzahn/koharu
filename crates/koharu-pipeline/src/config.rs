@@ -182,6 +182,10 @@ pub struct TranslationConfig {
     /// configs saved before this field existed keep working.
     #[serde(default = "default_previous_pages")]
     pub previous_pages: u32,
+    /// Models starred in the picker. App-level (not per project); defaulted on load so
+    /// configs saved before this field existed keep working.
+    #[serde(default)]
+    pub favourite_models: Vec<koharu_translator::ModelSelection>,
 }
 
 const fn default_previous_pages() -> u32 {
@@ -196,6 +200,7 @@ impl Default for TranslationConfig {
             target_language: Language::English,
             instructions: None,
             previous_pages: default_previous_pages(),
+            favourite_models: Vec::new(),
         }
     }
 }
@@ -325,6 +330,20 @@ mod tests {
 
         let config: PipelineConfig = toml::from_str(&old).unwrap();
         assert_eq!(config.translation.previous_pages, 2);
+    }
+
+    #[test]
+    fn configs_saved_before_favourite_models_existed_still_load() {
+        let saved = toml::to_string(&PipelineConfig::default()).unwrap();
+        let old = saved
+            .lines()
+            .filter(|line| !line.starts_with("favourite_models"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!old.contains("favourite_models"));
+
+        let config: PipelineConfig = toml::from_str(&old).unwrap();
+        assert!(config.translation.favourite_models.is_empty());
     }
 
     #[test]

@@ -117,6 +117,7 @@ impl Arguments {
                 target_language: self.target_language,
                 instructions: self.translation_instructions.clone(),
                 previous_pages: 2,
+                favourite_models: Vec::new(),
             },
             inpainting: match self.inpainting {
                 InpaintingChoice::LaMa => InpaintingModel::LaMa {},

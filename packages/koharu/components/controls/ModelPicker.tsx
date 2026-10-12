@@ -1,6 +1,15 @@
 'use client'
 
-import { Check, ChevronLeft, ChevronRight, HardDrive, LoaderCircle, Search, X } from 'lucide-react'
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  HardDrive,
+  LoaderCircle,
+  Search,
+  Star,
+  X,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -22,6 +31,8 @@ export function ModelPicker({
   loading = false,
   disabled = false,
   busyModel,
+  favourites = [],
+  onToggleFavourite,
   onBack,
   onSelect,
 }: {
@@ -31,6 +42,8 @@ export function ModelPicker({
   loading?: boolean
   disabled?: boolean
   busyModel?: string | null
+  favourites?: ModelSelection[]
+  onToggleFavourite?: (model: ModelSelection) => void
   onBack: () => void
   onSelect: (model: ModelSelection) => void
 }) {
@@ -51,6 +64,9 @@ export function ModelPicker({
           )
         })
         .map((model) => ({ model, quantization: null }))
+
+  const showFavourites = !pendingModel && !normalizedQuery && favourites.length > 0
+  const isFavourite = (key: string) => favourites.some((favourite) => modelKey(favourite) === key)
 
   return (
     <div className='min-w-0 overflow-hidden'>
@@ -109,6 +125,48 @@ export function ModelPicker({
         viewportClassName='h-auto max-h-64 min-w-0 overscroll-contain'
       >
         <div className='grid min-w-0 gap-0.5 py-0.5'>
+          {showFavourites && (
+            <div role='group' aria-label={t('modelPicker.favourites')} className='grid gap-0.5'>
+              {favourites.map((favourite) => {
+                const key = modelKey(favourite)
+                const available = models.some((model) => modelKey(model) === key)
+                const active =
+                  key === selectedKey &&
+                  (favourite.quantization ?? null) === (value?.quantization ?? null)
+                const label = favourite.model ?? providerName(providers, favourite.provider)
+                const provider = providerName(providers, favourite.provider)
+                return (
+                  <div key={key} className='flex min-w-0 items-center'>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      aria-label={t('modelPicker.useFavourite', { model: label, provider })}
+                      aria-pressed={active}
+                      disabled={disabled || saving || !available}
+                      className='h-auto min-h-9 min-w-0 flex-1 justify-start gap-2 overflow-hidden rounded-lg px-2 py-1 text-left font-normal hover:bg-primary/10'
+                      onClick={() => onSelect(favourite)}
+                    >
+                      <span className='min-w-0 flex-1 overflow-hidden'>
+                        <span className='block truncate text-[11px] text-foreground'>{label}</span>
+                        <span className='block truncate text-[9px] text-muted-foreground'>
+                          {available ? provider : t('modelPicker.unavailable', { provider })}
+                        </span>
+                      </span>
+                      {active && <Check className='size-3.5 shrink-0 text-primary' />}
+                    </Button>
+                    {onToggleFavourite && (
+                      <StarButton
+                        starred
+                        label={label}
+                        onClick={() => onToggleFavourite(favourite)}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+              <div className='my-0.5 border-t border-border/60' />
+            </div>
+          )}
           {options.map(({ model, quantization }, index) => {
             const key = modelKey(model)
             const expandable = !quantization && model.quantizations.length > 0
@@ -121,42 +179,52 @@ export function ModelPicker({
                 quantization.id === (value?.quantization ?? model.quantizations[0]?.id))
             const provider = providerName(providers, model.provider)
             return (
-              <Button
-                key={quantization?.id ?? key}
-                autoFocus={Boolean(quantization) && index === 0}
-                type='button'
-                variant='ghost'
-                aria-label={
-                  quantization
-                    ? undefined
-                    : t('modelPicker.useModel', { model: model.name, provider })
-                }
-                aria-pressed={selected}
-                disabled={disabled || saving}
-                className='h-auto min-h-9 w-full max-w-full min-w-0 justify-start gap-2 overflow-hidden rounded-lg px-2 py-1 text-left font-normal hover:bg-primary/10'
-                onClick={() => {
-                  if (expandable) setPendingKey(key)
-                  else onSelect(modelSelection(model, quantization?.id ?? null))
-                }}
-              >
-                <span className='min-w-0 flex-1 overflow-hidden'>
-                  <span className='block truncate text-[11px] text-foreground'>
-                    {quantization?.name ?? model.name}
-                  </span>
-                  {!quantization && (
-                    <span className='block truncate text-[9px] text-muted-foreground'>
-                      {provider}
+              <div key={quantization?.id ?? key} className='flex min-w-0 items-center'>
+                <Button
+                  autoFocus={Boolean(quantization) && index === 0}
+                  type='button'
+                  variant='ghost'
+                  aria-label={
+                    quantization
+                      ? undefined
+                      : t('modelPicker.useModel', { model: model.name, provider })
+                  }
+                  aria-pressed={selected}
+                  disabled={disabled || saving}
+                  className='h-auto min-h-9 max-w-full min-w-0 flex-1 justify-start gap-2 overflow-hidden rounded-lg px-2 py-1 text-left font-normal hover:bg-primary/10'
+                  onClick={() => {
+                    if (expandable) setPendingKey(key)
+                    else onSelect(modelSelection(model, quantization?.id ?? null))
+                  }}
+                >
+                  <span className='min-w-0 flex-1 overflow-hidden'>
+                    <span className='block truncate text-[11px] text-foreground'>
+                      {quantization?.name ?? model.name}
                     </span>
+                    {!quantization && (
+                      <span className='block truncate text-[9px] text-muted-foreground'>
+                        {provider}
+                      </span>
+                    )}
+                  </span>
+                  {downloaded && <HardDrive className='size-3.5 shrink-0 text-muted-foreground' />}
+                  {!quantization && busyModel === key ? (
+                    <LoaderCircle className='size-3.5 shrink-0 animate-spin text-primary' />
+                  ) : (
+                    selected && <Check className='size-3.5 shrink-0 text-primary' />
                   )}
-                </span>
-                {downloaded && <HardDrive className='size-3.5 shrink-0 text-muted-foreground' />}
-                {!quantization && busyModel === key ? (
-                  <LoaderCircle className='size-3.5 shrink-0 animate-spin text-primary' />
-                ) : (
-                  selected && <Check className='size-3.5 shrink-0 text-primary' />
+                  {expandable && (
+                    <ChevronRight className='size-3.5 shrink-0 text-muted-foreground' />
+                  )}
+                </Button>
+                {!quantization && onToggleFavourite && (
+                  <StarButton
+                    starred={isFavourite(key)}
+                    label={model.name}
+                    onClick={() => onToggleFavourite(modelSelection(model, null))}
+                  />
                 )}
-                {expandable && <ChevronRight className='size-3.5 shrink-0 text-muted-foreground' />}
-              </Button>
+              </div>
             )
           })}
           {options.length === 0 && (
@@ -174,5 +242,32 @@ export function ModelPicker({
         </div>
       </ScrollArea>
     </div>
+  )
+}
+
+function StarButton({
+  starred,
+  label,
+  onClick,
+}: {
+  starred: boolean
+  label: string
+  onClick: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Button
+      type='button'
+      variant='ghost'
+      size='icon-xs'
+      aria-label={t(starred ? 'modelPicker.unfavourite' : 'modelPicker.favourite', {
+        model: label,
+      })}
+      aria-pressed={starred}
+      className='shrink-0 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
+      onClick={onClick}
+    >
+      <Star className={starred ? 'size-3.5 fill-current text-primary' : 'size-3.5'} />
+    </Button>
   )
 }

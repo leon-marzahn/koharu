@@ -278,10 +278,15 @@
   },
   "modelPicker": {
     "empty": "No models are available.",
+    "favourite": "Favourite {{model}}",
+    "favourites": "Favourites",
     "loading": "Loading models…",
     "noResults": "No models match this search.",
     "search": "Search models",
     "title": "Choose a model",
+    "unavailable": "{{provider}} (unavailable)",
+    "unfavourite": "Remove {{model}} from favourites",
+    "useFavourite": "Use favourite {{model}} from {{provider}}",
     "useModel": "Use {{model}} from {{provider}}"
   },
   "navigator": {

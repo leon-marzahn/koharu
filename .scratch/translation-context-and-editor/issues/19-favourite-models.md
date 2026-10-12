@@ -4,11 +4,11 @@
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Star and unstar a model in the picker
-- [ ] Favourites appear in a group at the top of the dropdown, with the active model marked; selecting one switches the translation model
-- [ ] With no favourites the dropdown looks exactly as it does today
-- [ ] A favourite that is no longer available (provider removed, model gone) is shown disabled, not silently dropped
-- [ ] Existing configs without the field load unchanged (`#[serde(default)]` plus a test that loads a config lacking it)
-- [ ] Component tests cover star, switch, unavailable model and the unchanged no-favourites state
+- [x] Star and unstar a model in the picker
+- [x] Favourites appear in a group at the top of the dropdown, with the active model marked; selecting one switches the translation model
+- [x] With no favourites the dropdown looks exactly as it does today
+- [x] A favourite that is no longer available (provider removed, model gone) is shown disabled, not silently dropped
+- [x] Existing configs without the field load unchanged (`#[serde(default)]` plus a test that loads a config lacking it)
+- [x] Component tests cover star, switch, unavailable model and the unchanged no-favourites state

@@ -588,6 +588,11 @@ export type TranslationConfig = {
 	 *  configs saved before this field existed keep working.
 	 */
 	previous_pages?: number,
+	/**
+	 *  Models starred in the picker. App-level (not per project); defaulted on load so
+	 *  configs saved before this field existed keep working.
+	 */
+	favourite_models?: ModelSelection[],
 };
 
 export type TypesettingConfig = {

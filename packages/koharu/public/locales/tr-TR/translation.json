@@ -278,10 +278,15 @@
   },
   "modelPicker": {
     "empty": "Kullanılabilir model yok.",
+    "favourite": "Favourite {{model}}",
+    "favourites": "Favourites",
     "loading": "Modeller yükleniyor…",
     "noResults": "Bu aramayla eşleşen model yok.",
     "search": "Model ara",
     "title": "Model seç",
+    "unavailable": "{{provider}} (unavailable)",
+    "unfavourite": "Remove {{model}} from favourites",
+    "useFavourite": "Use favourite {{model}} from {{provider}}",
     "useModel": "{{provider}} sağlayıcısından {{model}} kullan"
   },
   "navigator": {

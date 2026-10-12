@@ -278,10 +278,15 @@
   },
   "modelPicker": {
     "empty": "사용 가능한 모델이 없습니다.",
+    "favourite": "Favourite {{model}}",
+    "favourites": "Favourites",
     "loading": "모델 불러오는 중…",
     "noResults": "검색과 일치하는 모델이 없습니다.",
     "search": "모델 검색",
     "title": "모델 선택",
+    "unavailable": "{{provider}} (unavailable)",
+    "unfavourite": "Remove {{model}} from favourites",
+    "useFavourite": "Use favourite {{model}} from {{provider}}",
     "useModel": "{{provider}}의 {{model}} 사용"
   },
   "navigator": {

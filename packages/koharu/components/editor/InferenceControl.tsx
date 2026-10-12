@@ -130,6 +130,19 @@ function RuntimeSelector({
       .finally(() => setLoadingModels(false))
   }
 
+  const favourites = translation?.favourite_models ?? []
+  const toggleFavourite = (target: ModelSelection) => {
+    if (!preferences || !translation || savingModel) return
+    const key = modelKey(target)
+    const favourite_models = favourites.some((entry) => modelKey(entry) === key)
+      ? favourites.filter((entry) => modelKey(entry) !== key)
+      : [...favourites, target]
+    const pipeline = { ...preferences.pipeline, translation: { ...translation, favourite_models } }
+    void savePreferences(pipeline, preferences.providers, preferences.typesetting)
+      .then(receivePreferences)
+      .catch(() => undefined)
+  }
+
   const chooseModel = (next: ModelSelection) => {
     if (!preferences || savingModel) return
     if (model && modelKey(model) === modelKey(next) && model.quantization === next.quantization) {
@@ -262,6 +275,8 @@ function RuntimeSelector({
             loading={loadingModels}
             disabled={running}
             busyModel={savingModel}
+            favourites={favourites}
+            onToggleFavourite={toggleFavourite}
             onBack={() => setView('root')}
             onSelect={chooseModel}
           />
