@@ -262,6 +262,32 @@ pub(crate) async fn set_geometry(
 
 #[tracing::instrument(
     target = "koharu_metrics",
+    name = "region_geometry_edited",
+    skip_all,
+    fields(origin = "user", entity_count = updates.len()),
+)]
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_region_geometry(
+    updates: Vec<GeometryUpdate>,
+    desktop: State<'_, Desktop>,
+    project: State<'_, CurrentProject>,
+    canvas_channel: State<'_, CanvasChannel>,
+) -> Result<(), Error> {
+    let (commit, page) = {
+        let mut project = project.project.lock().await;
+        let project = project.as_mut().context("no project is open")?;
+        let commit = project.set_region_geometry(updates).await?;
+        project.record_commit(&commit);
+        (commit, project.active_page())
+    };
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas_channel.channel.publish(canvas);
+    Ok(())
+}
+
+#[tracing::instrument(
+    target = "koharu_metrics",
     name = "visibility_edited",
     skip_all,
     fields(origin = "user", entity_count = layers.len()),

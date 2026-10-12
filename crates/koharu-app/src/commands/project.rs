@@ -5,9 +5,9 @@ use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_desktop::Frame;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Character, CharacterSheet, Commit,
-    EntityId, EntityOrigin, Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft,
-    Point as ScenePoint, Presents, RasterLayer as SceneRasterLayer, RasterLayerKind,
-    Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
+    EntityId, EntityOrigin, FitsTo, FlowsIn, Geometry as SceneGeometry, Group as SceneGroup,
+    Origin, PageDraft, Point as ScenePoint, Presents, RasterLayer as SceneRasterLayer,
+    RasterLayerKind, Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
     SourceText as SceneSourceText, Term, TermList, TextGroup as SceneTextGroup,
     TextLayout as SceneTextLayout, TextLayoutKind, Translation as SceneTranslation,
     Typography as SceneTypography, Visibility as SceneVisibility,
@@ -635,6 +635,51 @@ impl Project {
                         },
                     )?,
                     None => edit.remove::<SceneGeometry>(update.layer)?,
+                }
+            }
+            Ok(())
+        })?;
+        self.commit(patch).await
+    }
+
+    /// Moves or resizes detection regions. Refit rule: a text layer attached to the region
+    /// (FitsTo/FlowsIn) that has its own authored geometry takes the region's new points;
+    /// layers without one already follow the region automatically.
+    pub(crate) async fn set_region_geometry(
+        &mut self,
+        updates: Vec<GeometryUpdate>,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let mut edits = Vec::new();
+        for update in updates {
+            snapshot
+                .component::<SceneRegion>(update.layer)?
+                .context("not a detection region")?;
+            let geometry = SceneGeometry {
+                origin: Origin::User,
+                points: update
+                    .points
+                    .context("a region needs points")?
+                    .into_iter()
+                    .map(|p| ScenePoint { x: p.x, y: p.y })
+                    .collect(),
+            };
+            let mut targets = vec![update.layer];
+            for relation in snapshot
+                .relations_to_as::<FitsTo>(update.layer)
+                .chain(snapshot.relations_to_as::<FlowsIn>(update.layer))
+            {
+                let layer = relation.value().source;
+                if snapshot.component::<SceneGeometry>(layer)?.is_some() {
+                    targets.push(layer);
+                }
+            }
+            edits.push((targets, geometry));
+        }
+        let patch = snapshot.patch(|edit| {
+            for (targets, geometry) in &edits {
+                for &target in targets {
+                    edit.set(target, geometry)?;
                 }
             }
             Ok(())
@@ -1525,6 +1570,69 @@ mod tests {
         assert!(project.info().terms.is_empty());
         project.redo().await.unwrap();
         assert_eq!(project.info().terms.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn moving_a_region_refits_its_text_box_and_is_undoable() {
+        use koharu_scene::{FitsTo, Geometry as G, TextRegion};
+        let mut session = Session::memory().await.unwrap();
+        let mut edit = session.snapshot().edit();
+        let page = edit
+            .add_page(PageDraft::new("p", 100.0, 100.0), At::End)
+            .unwrap();
+        let region = edit
+            .add_analysis_region::<TextRegion>(
+                page,
+                At::End,
+                &G::rectangle(0.0, 0.0, 10.0, 10.0),
+                None,
+            )
+            .unwrap();
+        let content = edit.add_text_content(page, At::End).unwrap();
+        let layer = edit
+            .add_text_layer(
+                page,
+                At::End,
+                content,
+                &SceneTextLayout {
+                    origin: Origin::User,
+                    kind: TextLayoutKind::Paragraph,
+                    angle_degrees: None,
+                },
+            )
+            .unwrap();
+        edit.set(layer, &G::rectangle(1.0, 1.0, 5.0, 5.0)).unwrap();
+        edit.relate::<FitsTo>(layer, region).unwrap();
+        session.commit(edit.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        let moved = G::rectangle(20.0, 30.0, 10.0, 10.0);
+        let update = GeometryUpdate {
+            layer: region,
+            points: Some(
+                moved
+                    .points
+                    .iter()
+                    .map(|p| Point { x: p.x, y: p.y })
+                    .collect(),
+            ),
+        };
+        let commit = project.set_region_geometry(vec![update]).await.unwrap();
+        project.record_commit(&commit);
+        let points = |project: &Project, id| {
+            project
+                .snapshot()
+                .component::<SceneGeometry>(id)
+                .unwrap()
+                .unwrap()
+                .points
+        };
+        assert_eq!(points(&project, region), moved.points);
+        assert_eq!(points(&project, layer), moved.points);
+
+        project.undo().await.unwrap();
+        assert_eq!(points(&project, region)[0].x, 0.0);
+        assert_eq!(points(&project, layer)[0].x, 1.0);
     }
 
     #[test]

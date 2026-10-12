@@ -819,6 +819,70 @@ describe('greenfield editor', () => {
     expect(screen.queryByTestId('center-mark')).not.toBeInTheDocument()
   })
 
+  it('toggles the regions overlay and commits a resized region', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const setRegion = vi.spyOn(commands, 'setRegionGeometry').mockResolvedValue(null)
+    const page = queryClient.getQueryData(pageKey) as Parameters<typeof CanvasOverlay>[0]['page']
+    const region = {
+      id: 'region-1',
+      parent: null,
+      kind: 'text',
+      label: null,
+      geometry: {
+        points: [
+          { x: 10, y: 10 },
+          { x: 60, y: 10 },
+          { x: 60, y: 40 },
+          { x: 10, y: 40 },
+        ],
+      },
+    } as unknown as Parameters<typeof CanvasOverlay>[0]['page']['regions'][number]
+    const props = {
+      page: { ...page, regions: [region] },
+      camera: { zoom: 1, translation: [0, 0] as [number, number], fitted: false },
+      selected: [],
+      hovered: null,
+      frames: {},
+      previews: {},
+      draft: null,
+      cursor: null,
+      brushSize: 10,
+      showBrushCursor: false,
+      onTransformStart: vi.fn(),
+      onTransformFrame: vi.fn(),
+      onTransformEnd: vi.fn(),
+    }
+    render(
+      <TooltipProvider>
+        <ToolBar />
+        <CanvasOverlay {...props} />
+      </TooltipProvider>,
+    )
+    expect(screen.queryByTestId('region-region-1')).not.toBeInTheDocument()
+
+    const toggle = screen.getByRole('button', { name: 'Regions' })
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    // Overlay-only: regions live in the DOM overlay, never in the exported canvas.
+    const box = screen.getByTestId('region-region-1')
+    expect(screen.getByTestId('canvas-overlay')).toContainElement(box)
+
+    await user.click(box)
+    const handle = document.querySelector('[data-resize-handle="e"]') as HTMLElement
+    expect(handle).not.toBeNull()
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 60, clientY: 25 })
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 90, clientY: 25 })
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 90, clientY: 25 })
+    expect(setRegion).toHaveBeenCalledTimes(1)
+    const [[update]] = setRegion.mock.calls[0]
+    expect(update.layer).toBe('region-1')
+    expect(Math.max(...update.points!.map((p) => p.x))).toBeGreaterThan(60)
+
+    await user.click(toggle)
+    expect(screen.queryByTestId('region-region-1')).not.toBeInTheDocument()
+  })
+
   it('adjusts brush size from the toolbar popover', async () => {
     const user = userEvent.setup()
     installProject()

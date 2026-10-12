@@ -3,9 +3,11 @@
 import { Plus } from 'lucide-react'
 import { useMemo, useRef } from 'react'
 
+import { RegionsOverlay } from '@/components/editor/RegionsOverlay'
 import { SelectionControls } from '@/components/editor/SelectionControls'
 import { effectiveLayerVisibility, expandLayerSelection, isTextLayer } from '@/lib/document'
 import { controlFrame, cssFrame, selectableLayer, type Camera } from '@/lib/geometry'
+import { useKoharuStore } from '@/lib/store'
 import type {
   EntityId,
   Frame,
@@ -47,6 +49,7 @@ export function CanvasOverlay({
   onTransformEnd,
 }: CanvasOverlayProps) {
   const root = useRef<HTMLDivElement>(null)
+  const showRegions = useKoharuStore((state) => state.showRegions)
   const expandedSelection = useMemo(
     () => expandLayerSelection(page.layers, selected),
     [page.layers, selected],
@@ -113,6 +116,7 @@ export function CanvasOverlay({
         )
       })}
 
+      {showRegions && <RegionsOverlay regions={page.regions} camera={camera} container={root} />}
       {draft && <DraftOverlay frame={draft} camera={camera} />}
       {showBrushCursor && cursor && (
         <div

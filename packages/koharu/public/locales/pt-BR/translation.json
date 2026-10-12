@@ -527,6 +527,7 @@
     "zoom": "Zoom"
   },
   "tools": {
+    "regions": "Regiões",
     "brushSize": "Tamanho do pincel",
     "brushSizeInput": "Tamanho do pincel",
     "brushSizePixels": "Tamanho do pincel: {{size}} pixels",

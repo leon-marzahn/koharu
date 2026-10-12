@@ -527,6 +527,7 @@
     "zoom": "ズーム"
   },
   "tools": {
+    "regions": "領域",
     "brushSize": "ブラシサイズ",
     "brushSizeInput": "ブラシサイズ",
     "brushSizePixels": "ブラシサイズ: {{size}}ピクセル",

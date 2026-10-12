@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Toggle shows and hides all regions on the page
-- [ ] Move and resize commit and are undoable
-- [ ] The attached text box refits to the region
-- [ ] Overlay never appears in export
-- [ ] Component and stage tests cover the above
+- [x] Toggle shows and hides all regions on the page
+- [x] Move and resize commit and are undoable
+- [x] The attached text box refits to the region
+- [x] Overlay never appears in export
+- [x] Component and stage tests cover the above

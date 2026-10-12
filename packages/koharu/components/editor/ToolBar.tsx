@@ -8,6 +8,7 @@ import {
   MousePointer2,
   Pipette,
   Plus,
+  ScanSearch,
   Sparkles,
   Type,
 } from 'lucide-react'
@@ -58,6 +59,8 @@ export function ToolBar() {
   const setBrush = useKoharuStore((state) => state.setBrush)
   const shortcuts = useKoharuStore((state) => state.shortcuts)
   const hasBrush = isBrushTool(active)
+  const showRegions = useKoharuStore((state) => state.showRegions)
+  const toggleRegions = useKoharuStore((state) => state.toggleRegions)
 
   return (
     <aside className='absolute top-3 left-3 z-20 flex w-11 flex-col rounded-2xl border border-border bg-[var(--surface-floating)] p-1 shadow-[var(--shadow-toolrail)]'>
@@ -89,6 +92,29 @@ export function ToolBar() {
             </Tooltip>
           </div>
         ))}
+      </div>
+
+      <div className='flex flex-col items-center border-t border-border/80 py-0.5'>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                disabled={!page}
+                aria-label={t('tools.regions')}
+                aria-pressed={showRegions}
+                data-active={showRegions}
+                className='text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground disabled:opacity-30 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground'
+                onClick={toggleRegions}
+              />
+            }
+          >
+            <ScanSearch className='size-4' />
+          </TooltipTrigger>
+          <TooltipContent side='right'>{t('tools.regions')}</TooltipContent>
+        </Tooltip>
       </div>
 
       {hasBrush && (

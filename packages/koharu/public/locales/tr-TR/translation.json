@@ -527,6 +527,7 @@
     "zoom": "Yakınlaştırma"
   },
   "tools": {
+    "regions": "Bölgeler",
     "brushSize": "Fırça boyutu",
     "brushSizeInput": "Fırça boyutu",
     "brushSizePixels": "Fırça boyutu: {{size}} piksel",
