@@ -277,16 +277,21 @@ impl StageProcessor for Processor {
             input.page,
             self.config.previous_pages,
         )?);
+        // Terms match the current page and the previous-page lines, so a term stays in play
+        // while the scene keeps talking about it without naming it.
+        let term_text = targets
+            .iter()
+            .map(|(_, s)| s.as_str())
+            .chain(context.iter().map(|hint| hint.source.as_str()))
+            .collect::<Vec<_>>();
+        let terms = page_terms(&input.scene, &term_text)?;
         let mut request = TranslationRequest::new(
             targets.iter().map(|(_, source)| source.clone()),
             self.config.target_language,
         )
         .with_context(context)
         .with_characters(character_sheet(&input.scene)?)
-        .with_terms(page_terms(
-            &input.scene,
-            &targets.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>(),
-        )?)
+        .with_terms(terms)
         .with_known_sources(known_sources(&input.scene)?);
         if let Some(instructions) = self.config.instructions.as_deref() {
             request = request.with_instructions(instructions);

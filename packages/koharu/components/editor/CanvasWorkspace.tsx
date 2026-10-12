@@ -11,7 +11,7 @@ import { ToolBar } from '@/components/editor/ToolBar'
 import { useCanvas } from '@/components/editor/useCanvas'
 import { call } from '@/lib/backend'
 import { copyBoxes, copyStyle, pasteBoxes, pasteStyle } from '@/lib/clipboard'
-import { expandLayerSelection, isTextLayer } from '@/lib/document'
+import { defaultTypography, expandLayerSelection, isTextLayer } from '@/lib/document'
 import {
   controlFrame,
   draftFrame,
@@ -484,13 +484,17 @@ export function CanvasWorkspace() {
         return
       const ids = expandLayerSelection(page?.layers ?? [], useKoharuStore.getState().selectedLayers)
       const updates = (page?.layers ?? []).flatMap((layer) =>
-        isTextLayer(layer) && ids.includes(layer.id) && layer.typography?.size != null
+        isTextLayer(layer) && ids.includes(layer.id)
           ? [
               {
                 layer: layer.id,
+                // Same fallbacks as the Inspector: auto-fit boxes carry no explicit size.
                 typography: {
-                  ...layer.typography,
-                  size: Math.min(300, Math.max(1, layer.typography.size + dir * (event.shiftKey ? 10 : 1))),
+                  ...(layer.typography ?? defaultTypography),
+                  size: Math.min(
+                    300,
+                    Math.max(1, (layer.typography?.size ?? 24) + dir * (event.shiftKey ? 10 : 1)),
+                  ),
                   auto_fit: false,
                 },
               },

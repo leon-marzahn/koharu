@@ -671,6 +671,23 @@ describe('canvas interaction adapter', () => {
       ])
     })
 
+    it('Cmd+Up steps boxes without explicit typography from the 24 px default', async () => {
+      installText()
+      queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+        ...page,
+        layers: page.layers.map((value) => ({ ...value, typography: null })),
+      }))
+      const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
+      setTypography.mockClear()
+      renderWorkspace()
+
+      fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true })
+
+      expect(setTypography).toHaveBeenCalledWith([
+        { layer: 'element', typography: expect.objectContaining({ size: 25, auto_fit: false }) },
+      ])
+    })
+
     it('does nothing while a text field is focused', async () => {
       installText()
       const commit = vi.spyOn(commands, 'commitTransform').mockResolvedValue(2)
