@@ -334,6 +334,14 @@
     "speechStyle": "Konuşma tarzı",
     "appearance": "Görünüm",
     "notes": "Notlar",
+    "terms": "Terim listesi",
+    "addTerm": "Terim ekle",
+    "deleteTerm": "{{name}} öğesini sil",
+    "termsEmpty": "Henüz terim yok. Çeviri isteğiyle yalnızca sayfada geçen terimler gönderilir.",
+    "termEntry": "Terim {{number}}",
+    "termSource": "Kaynak",
+    "termTarget": "Hedef",
+    "termNote": "Not (isteğe bağlı)",
     "open": "Proje"
   },
   "providerDescriptions": {

@@ -5,7 +5,9 @@ use indoc::indoc;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Value, json};
 
-use crate::{Language, TranslationCharacter, TranslationContext, TranslationRequest};
+use crate::{
+    Language, TranslationCharacter, TranslationContext, TranslationRequest, TranslationTerm,
+};
 
 pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, String)> {
     let input = TranslationInput {
@@ -13,6 +15,7 @@ pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, S
         target_language: request.target_language,
         context: &request.context,
         characters: &request.characters,
+        terms: &request.terms,
         segments: request
             .segments
             .iter()
@@ -164,6 +167,18 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         "}.trim_end());
     }
 
+    if !request.terms.is_empty() {
+        prompt.push_str("\n\n");
+        prompt.push_str(indoc! {"
+            Term list requirements:
+            The `terms` array lists project terms that occur on this page.
+            Each entry has `source`, `target`, and `note`.
+            Whenever `source` appears in a segment, render it exactly as `target`, without paraphrasing or inflecting it.
+            Use `note`, when set, only to understand the context; never output it.
+            Do not translate or return the term entries.
+        "}.trim_end());
+    }
+
     if request.image.is_some() {
         prompt.push_str("\n\n");
         prompt.push_str(indoc! {"
@@ -191,6 +206,7 @@ struct TranslationInput<'a> {
     target_language: Language,
     context: &'a [TranslationContext],
     characters: &'a [TranslationCharacter],
+    terms: &'a [TranslationTerm],
     segments: Vec<TranslationInputSegment<'a>>,
 }
 
@@ -364,6 +380,25 @@ mod tests {
         assert!(system.contains("Character sheet"));
         let plain = prompts(&TranslationRequest::new(["new"], Language::English)).unwrap();
         assert!(!plain.0.contains("Character sheet"));
+    }
+
+    #[test]
+    fn prompt_payload_contains_terms_and_explains_them() {
+        let term = |source: &str| TranslationTerm {
+            source: source.into(),
+            target: format!("{source}-t"),
+            note: "title".into(),
+        };
+        let request =
+            TranslationRequest::new(["new"], Language::English).with_terms([term("a"), term("b")]);
+        let (system, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+        assert_eq!(input["terms"].as_array().unwrap().len(), 2);
+        assert_eq!(input["terms"][1]["target"], "b-t");
+        assert_eq!(input["terms"][0]["note"], "title");
+        assert!(system.contains("Term list"));
+        let plain = prompts(&TranslationRequest::new(["new"], Language::English)).unwrap();
+        assert!(!plain.0.contains("Term list"));
     }
 
     #[test]

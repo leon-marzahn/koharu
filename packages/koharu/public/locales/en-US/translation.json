@@ -334,6 +334,14 @@
     "speechStyle": "Speech style",
     "appearance": "Appearance",
     "notes": "Notes",
+    "terms": "Term list",
+    "addTerm": "Add term",
+    "deleteTerm": "Delete {{name}}",
+    "termsEmpty": "No terms yet. Only terms found on the page are sent with a translation request.",
+    "termEntry": "Term {{number}}",
+    "termSource": "Source",
+    "termTarget": "Target",
+    "termNote": "Note (optional)",
     "open": "Project"
   },
   "providerDescriptions": {

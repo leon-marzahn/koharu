@@ -205,6 +205,7 @@ function installProject() {
     can_undo: true,
     can_redo: false,
     characters: [],
+    terms: [],
   })
   queryClient.setQueryData(pagesKey, [
     {
@@ -539,6 +540,7 @@ describe('greenfield editor', () => {
           can_undo: true,
           can_redo: false,
           characters: [],
+          terms: [],
         },
         page: pages[2]!,
       })
@@ -553,6 +555,7 @@ describe('greenfield editor', () => {
           can_undo: true,
           can_redo: false,
           characters: [],
+          terms: [],
         },
         page: pages[1]!,
       })

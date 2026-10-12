@@ -60,6 +60,7 @@ const project: ProjectInfo = {
   can_undo: true,
   can_redo: false,
   characters: [],
+  terms: [],
 }
 
 beforeEach(() => {

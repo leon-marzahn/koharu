@@ -334,6 +334,14 @@
     "speechStyle": "話し方",
     "appearance": "外見",
     "notes": "メモ",
+    "terms": "用語集",
+    "addTerm": "用語を追加",
+    "deleteTerm": "{{name}} を削除",
+    "termsEmpty": "用語はまだありません。ページに出現する用語のみが翻訳リクエストに含まれます。",
+    "termEntry": "用語 {{number}}",
+    "termSource": "原文",
+    "termTarget": "訳語",
+    "termNote": "メモ（任意）",
     "open": "プロジェクト"
   },
   "providerDescriptions": {

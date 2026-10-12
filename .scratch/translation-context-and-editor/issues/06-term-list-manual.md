@@ -4,9 +4,9 @@
 
 **Blocked by:** 05 Character sheet (manual)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Terms persist in the project and are undoable
-- [ ] Only terms whose source is a substring of a page segment are sent
-- [ ] Adding, editing and deleting terms works from the tab
-- [ ] Prompt-payload and component tests cover filtering and editing
+- [x] Terms persist in the project and are undoable
+- [x] Only terms whose source is a substring of a page segment are sent
+- [x] Adding, editing and deleting terms works from the tab
+- [x] Prompt-payload and component tests cover filtering and editing

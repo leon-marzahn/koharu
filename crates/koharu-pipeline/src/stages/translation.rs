@@ -1,9 +1,12 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{
-    Authored, CharacterSheet, EntityId, LanguageTag, Origin, Snapshot, SourceText, Translation,
+    Authored, CharacterSheet, EntityId, LanguageTag, Origin, Snapshot, SourceText, TermList,
+    Translation,
 };
-use koharu_translator::{TranslationCharacter, TranslationContext, TranslationRequest, Translator};
+use koharu_translator::{
+    TranslationCharacter, TranslationContext, TranslationRequest, TranslationTerm, Translator,
+};
 
 use crate::TranslationConfig;
 
@@ -74,6 +77,24 @@ fn character_sheet(scene: &Snapshot) -> Result<Vec<TranslationCharacter>> {
         .collect())
 }
 
+/// Term list entries whose source is a substring of at least one segment of the page.
+fn page_terms(scene: &Snapshot, segments: &[&str]) -> Result<Vec<TranslationTerm>> {
+    Ok(scene
+        .project_component::<TermList>()?
+        .unwrap_or_default()
+        .terms
+        .into_iter()
+        .filter(|term| {
+            !term.source.is_empty() && segments.iter().any(|text| text.contains(&term.source))
+        })
+        .map(|term| TranslationTerm {
+            source: term.source,
+            target: term.target,
+            note: term.note,
+        })
+        .collect())
+}
+
 #[async_trait]
 impl StageProcessor for Processor {
     fn model(&self) -> &'static str {
@@ -116,7 +137,11 @@ impl StageProcessor for Processor {
             self.config.target_language,
         )
         .with_context(context)
-        .with_characters(character_sheet(&input.scene)?);
+        .with_characters(character_sheet(&input.scene)?)
+        .with_terms(page_terms(
+            &input.scene,
+            &targets.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>(),
+        )?);
         if let Some(instructions) = self.config.instructions.as_deref() {
             request = request.with_instructions(instructions);
         }
@@ -199,6 +224,32 @@ mod tests {
                 ("b".into(), "b-t".into(), "rival".into())
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn only_terms_found_in_a_segment_reach_the_request() {
+        let mut session = Session::memory().await.unwrap();
+        let term = |source: &str| koharu_scene::Term {
+            source: source.into(),
+            target: format!("{source}-t"),
+            note: "n".into(),
+        };
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                edit.set_project(&TermList {
+                    terms: vec![term("魔王"), term("勇者"), term("")],
+                })
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        let sent = page_terms(&scene, &["魔王城へ行く", "hello"]).unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(
+            (sent[0].source.as_str(), sent[0].target.as_str()),
+            ("魔王", "魔王-t")
+        );
+        assert!(page_terms(&scene, &["nothing"]).unwrap().is_empty());
     }
 
     #[tokio::test]

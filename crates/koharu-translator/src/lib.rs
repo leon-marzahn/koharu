@@ -16,7 +16,7 @@ use koharu_ml::Device;
 use error::{Error, Result};
 use local::LocalTranslator;
 
-pub use backend::{TranslationCharacter, TranslationContext, TranslationRequest};
+pub use backend::{TranslationCharacter, TranslationContext, TranslationRequest, TranslationTerm};
 pub use language::Language;
 pub use model::{GenerationConfig, Model, ModelSelection, Quantization};
 pub(crate) use model::{ModelGeneration, QuantizationDefinition, display_name};

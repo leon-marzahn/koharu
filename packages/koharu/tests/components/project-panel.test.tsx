@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ProjectPanel } from '@/components/editor/ProjectPanel'
 import { projectKey, queryClient } from '@/lib/queries'
-import { commands, type Character, type ProjectInfo } from '@koharu/bridge/protocol'
+import { commands, type Character, type ProjectInfo, type Term } from '@koharu/bridge/protocol'
 
 const alice: Character = {
   source_name: 'アリス',
@@ -15,7 +15,9 @@ const alice: Character = {
   notes: 'rival of Bob',
 }
 
-function install(characters: Character[]) {
+const demon: Term = { source: '魔王', target: 'Demon King', note: 'title' }
+
+function install(characters: Character[], terms: Term[] = []) {
   const project: ProjectInfo = {
     name: 'Book',
     revision: 1,
@@ -23,6 +25,7 @@ function install(characters: Character[]) {
     can_undo: false,
     can_redo: false,
     characters,
+    terms,
   }
   queryClient.setQueryData(projectKey, project)
   vi.spyOn(commands, 'getProject').mockResolvedValue(project)
@@ -73,5 +76,35 @@ describe('project panel', () => {
     remove.focus()
     await user.keyboard('{Enter}')
     await waitFor(() => expect(setCharacters).toHaveBeenLastCalledWith([]))
+  })
+
+  it('adds, edits and deletes terms from the Term list tab with the keyboard alone', async () => {
+    const user = userEvent.setup()
+    const setTerms = vi.spyOn(commands, 'setTerms').mockResolvedValue(null)
+    install([], [demon])
+
+    const tab = screen.getByRole('tab', { name: 'Term list' })
+    tab.focus()
+    await user.keyboard('{Enter}')
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Source')).toHaveValue('魔王')
+    expect(screen.getByLabelText('Target')).toHaveValue('Demon King')
+    expect(screen.getByLabelText('Note (optional)')).toHaveValue('title')
+
+    const add = screen.getByRole('button', { name: 'Add term' })
+    add.focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() =>
+      expect(setTerms).toHaveBeenLastCalledWith([demon, { source: '', target: '', note: '' }]),
+    )
+
+    screen.getByLabelText('Target').focus()
+    await user.keyboard('{Control>}a{/Control}Maou')
+    await user.tab() // blur commits
+    await waitFor(() => expect(setTerms).toHaveBeenLastCalledWith([{ ...demon, target: 'Maou' }]))
+
+    screen.getByRole('button', { name: 'Delete Demon King' }).focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(setTerms).toHaveBeenLastCalledWith([]))
   })
 })

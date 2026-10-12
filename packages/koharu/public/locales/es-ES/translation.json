@@ -334,6 +334,14 @@
     "speechStyle": "Estilo de habla",
     "appearance": "Apariencia",
     "notes": "Notas",
+    "terms": "Lista de términos",
+    "addTerm": "Añadir término",
+    "deleteTerm": "Eliminar {{name}}",
+    "termsEmpty": "Aún no hay términos. Solo se envían con la traducción los términos que aparecen en la página.",
+    "termEntry": "Término {{number}}",
+    "termSource": "Origen",
+    "termTarget": "Destino",
+    "termNote": "Nota (opcional)",
     "open": "Proyecto"
   },
   "providerDescriptions": {

@@ -8,9 +8,9 @@ use koharu_scene::{
     EntityId, EntityOrigin, Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft,
     Point as ScenePoint, Presents, RasterLayer as SceneRasterLayer, RasterLayerKind,
     Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
-    SourceText as SceneSourceText, TextGroup as SceneTextGroup, TextLayout as SceneTextLayout,
-    TextLayoutKind, Translation as SceneTranslation, Typography as SceneTypography,
-    Visibility as SceneVisibility,
+    SourceText as SceneSourceText, Term, TermList, TextGroup as SceneTextGroup,
+    TextLayout as SceneTextLayout, TextLayoutKind, Translation as SceneTranslation,
+    Typography as SceneTypography, Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
@@ -35,6 +35,7 @@ pub struct ProjectInfo {
     pub can_undo: bool,
     pub can_redo: bool,
     pub characters: Vec<Character>,
+    pub terms: Vec<Term>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -329,6 +330,13 @@ impl Project {
                 .flatten()
                 .unwrap_or_default()
                 .characters,
+            terms: self
+                .snapshot()
+                .project_component::<TermList>()
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+                .terms,
         }
     }
 
@@ -336,6 +344,13 @@ impl Project {
         let patch = self
             .snapshot()
             .patch(|edit| edit.set_project(&CharacterSheet { characters }))?;
+        self.commit(patch).await
+    }
+
+    pub(crate) async fn set_terms(&mut self, terms: Vec<Term>) -> Result<Commit> {
+        let patch = self
+            .snapshot()
+            .patch(|edit| edit.set_project(&TermList { terms }))?;
         self.commit(patch).await
     }
 
@@ -1484,6 +1499,32 @@ mod tests {
         assert!(project.info().characters.is_empty());
         project.redo().await.unwrap();
         assert_eq!(project.info().characters.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn term_list_is_saved_in_the_project_and_undoable() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        assert!(project.info().terms.is_empty());
+
+        let term = Term {
+            source: "魔王".into(),
+            target: "Demon King".into(),
+            note: "title".into(),
+        };
+        let commit = project.set_terms(vec![term.clone()]).await.unwrap();
+        project.record_commit(&commit);
+        assert_eq!(project.info().terms, [term.clone()]);
+
+        let commit = project.set_terms(Vec::new()).await.unwrap();
+        project.record_commit(&commit);
+        assert!(project.info().terms.is_empty());
+
+        project.undo().await.unwrap();
+        assert_eq!(project.info().terms, [term]);
+        project.undo().await.unwrap();
+        assert!(project.info().terms.is_empty());
+        project.redo().await.unwrap();
+        assert_eq!(project.info().terms.len(), 1);
     }
 
     #[test]

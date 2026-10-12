@@ -66,6 +66,30 @@ impl Component for CharacterSheet {
     }
 }
 
+/// One term list entry: `source` must be rendered as `target`; `note` explains context.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct Term {
+    pub source: String,
+    pub target: String,
+    pub note: String,
+}
+
+/// Per-project term list; only entries matching the page are sent with a translation request.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct TermList {
+    pub terms: Vec<Term>,
+}
+
+impl Component for TermList {
+    const KIND: &'static str = "dev.koharu.term-list";
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Page {

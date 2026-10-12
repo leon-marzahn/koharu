@@ -334,6 +334,14 @@
     "speechStyle": "말투",
     "appearance": "외모",
     "notes": "메모",
+    "terms": "용어집",
+    "addTerm": "용어 추가",
+    "deleteTerm": "{{name}} 삭제",
+    "termsEmpty": "용어가 아직 없습니다. 페이지에 나타나는 용어만 번역 요청에 포함됩니다.",
+    "termEntry": "용어 {{number}}",
+    "termSource": "원문",
+    "termTarget": "번역어",
+    "termNote": "메모(선택)",
     "open": "프로젝트"
   },
   "providerDescriptions": {

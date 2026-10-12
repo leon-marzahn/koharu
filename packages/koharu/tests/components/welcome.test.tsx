@@ -33,6 +33,7 @@ describe('StartView', () => {
             can_undo: false,
             can_redo: false,
             characters: [],
+            terms: [],
           }
         : null,
     )
@@ -64,6 +65,7 @@ describe('StartView', () => {
             can_undo: false,
             can_redo: false,
             characters: [],
+            terms: [],
           }
         : null,
     )

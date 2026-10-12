@@ -18,6 +18,7 @@ pub struct TranslationRequest {
     pub instructions: Option<String>,
     pub context: Vec<TranslationContext>,
     pub characters: Vec<TranslationCharacter>,
+    pub terms: Vec<TranslationTerm>,
     pub image: Option<Arc<DynamicImage>>,
 }
 
@@ -34,6 +35,7 @@ impl TranslationRequest {
             instructions: None,
             context: Vec::new(),
             characters: Vec::new(),
+            terms: Vec::new(),
             image: None,
         }
     }
@@ -69,6 +71,12 @@ impl TranslationRequest {
         characters: impl IntoIterator<Item = TranslationCharacter>,
     ) -> Self {
         self.characters = characters.into_iter().collect();
+        self
+    }
+
+    #[must_use]
+    pub fn with_terms(mut self, terms: impl IntoIterator<Item = TranslationTerm>) -> Self {
+        self.terms = terms.into_iter().collect();
         self
     }
 
@@ -147,6 +155,14 @@ pub struct TranslationCharacter {
     pub speech_style: String,
     pub appearance: String,
     pub notes: String,
+}
+
+/// A term list entry already filtered to the page being translated.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TranslationTerm {
+    pub source: String,
+    pub target: String,
+    pub note: String,
 }
 
 impl TranslationContext {

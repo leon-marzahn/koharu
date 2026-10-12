@@ -334,6 +334,14 @@
     "speechStyle": "說話風格",
     "appearance": "外貌",
     "notes": "備註",
+    "terms": "術語表",
+    "addTerm": "新增術語",
+    "deleteTerm": "刪除 {{name}}",
+    "termsEmpty": "還沒有術語。只有頁面上出現的術語才會隨翻譯請求傳送。",
+    "termEntry": "術語 {{number}}",
+    "termSource": "原文",
+    "termTarget": "譯文",
+    "termNote": "備註（選填）",
     "open": "專案"
   },
   "providerDescriptions": {

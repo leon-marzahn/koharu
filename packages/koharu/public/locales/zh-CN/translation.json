@@ -334,6 +334,14 @@
     "speechStyle": "说话风格",
     "appearance": "外貌",
     "notes": "备注",
+    "terms": "术语表",
+    "addTerm": "添加术语",
+    "deleteTerm": "删除 {{name}}",
+    "termsEmpty": "还没有术语。只有页面上出现的术语才会随翻译请求发送。",
+    "termEntry": "术语 {{number}}",
+    "termSource": "原文",
+    "termTarget": "译文",
+    "termNote": "备注（可选）",
     "open": "项目"
   },
   "providerDescriptions": {

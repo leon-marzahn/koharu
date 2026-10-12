@@ -334,6 +334,14 @@
     "speechStyle": "Манера речи",
     "appearance": "Внешность",
     "notes": "Заметки",
+    "terms": "Глоссарий",
+    "addTerm": "Добавить термин",
+    "deleteTerm": "Удалить {{name}}",
+    "termsEmpty": "Терминов пока нет. С запросом на перевод отправляются только термины, найденные на странице.",
+    "termEntry": "Термин {{number}}",
+    "termSource": "Оригинал",
+    "termTarget": "Перевод",
+    "termNote": "Заметка (необязательно)",
     "open": "Проект"
   },
   "providerDescriptions": {
