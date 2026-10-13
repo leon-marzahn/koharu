@@ -42,6 +42,7 @@ import {
   type Model,
   type ModelSelection,
   type PageSummary,
+  type Job,
   type Preferences,
   type ProjectInfo,
 } from '@koharu/bridge/protocol'
@@ -1389,7 +1390,7 @@ describe('greenfield editor', () => {
     expect(screen.queryByRole('button', { name: 'Fit window' })).not.toBeInTheDocument()
   })
 
-  it('changes the pipeline scope and selected stages from the runtime selector', async () => {
+  it('runs translate and inpaint alone on the chosen scope, and run all stays full', async () => {
     installProject()
     const run = vi.spyOn(commands, 'process').mockResolvedValue('job')
     render(<CanvasCommandBar />)
@@ -1397,30 +1398,68 @@ describe('greenfield editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
     fireEvent.click(screen.getByRole('button', { name: /Scope Selection/ }))
     fireEvent.click(screen.getByRole('button', { name: /Entire project/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Stages 4 stages/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Translation/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Inpainting/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Run processing' }))
+    expect(screen.queryByRole('button', { name: /Stages/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Translate' }))
     await waitFor(() =>
       expect(run).toHaveBeenLastCalledWith(
         { scope: 'project' },
-        { operation: 'stages', stages: ['detection', 'ocr'] },
+        { operation: 'only', stage: 'translation' },
       ),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
-    fireEvent.click(screen.getByRole('button', { name: /Scope Project/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Selected pages/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Stages 2 stages/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Translation/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Inpainting/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Run processing' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Inpaint' }))
     await waitFor(() =>
       expect(run).toHaveBeenLastCalledWith(
-        { scope: 'pages', value: ['page'] },
-        { operation: 'full' },
+        { scope: 'project' },
+        { operation: 'only', stage: 'inpainting' },
       ),
     )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run processing' }))
+    await waitFor(() =>
+      expect(run).toHaveBeenLastCalledWith({ scope: 'project' }, { operation: 'full' }),
+    )
+  })
+
+  it('disables the stage actions while a job runs', () => {
+    installProject()
+    useKoharuStore.setState({
+      jobs: {
+        job: {
+          id: 'job',
+          state: 'running',
+          completed: 0,
+          total: 1,
+          page: null,
+          stage: null,
+          model: null,
+          error: null,
+        } satisfies Job,
+      },
+    })
+    render(<CanvasCommandBar />)
+    fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
+    expect(screen.getByRole('button', { name: 'Translate' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Inpaint' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Stop processing' })).toBeEnabled()
+  })
+
+  it('saves the OCR and inpainting choices as pipeline preferences', async () => {
+    installProject()
+    const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(preferences)
+    render(<CanvasCommandBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
+    fireEvent.click(screen.getByRole('button', { name: /OCR PaddleOCR-VL 1.6/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Manga OCR/ }))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save.mock.calls[0]![0]).toMatchObject({ ocr: { model: 'manga-ocr' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Inpainting LaMa/ }))
+    fireEvent.click(screen.getByRole('button', { name: /AOT Inpainting/ }))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1]![0]).toMatchObject({ inpainting: { model: 'aot-inpainting' } })
   })
 
   it('runs the selected pages by default and exposes the runtime shortcuts', async () => {
@@ -1444,7 +1483,8 @@ describe('greenfield editor', () => {
     await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
     expect(screen.getByRole('button', { name: /Model Gemma 4 E2B Instruct/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Scope Selection/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Stages 4 stages/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /OCR PaddleOCR-VL 1.6/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Inpainting LaMa/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Output English/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(useKoharuStore.getState().settingsOpen).toBe(true)
@@ -1527,10 +1567,6 @@ describe('greenfield editor', () => {
     await user.click(screen.getByRole('button', { name: 'Processing settings' }))
     await user.click(screen.getByRole('button', { name: /Scope Selection/ }))
     await user.click(screen.getByRole('button', { name: /Entire project/ }))
-    await user.click(screen.getByRole('button', { name: /Stages 4 stages/ }))
-    await user.click(screen.getByRole('button', { name: /Translation/ }))
-    await user.click(screen.getByRole('button', { name: /Inpainting/ }))
-    await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: /Output English/ }))
     await user.click(screen.getByRole('combobox', { name: 'Target language' }))
     await user.click(await screen.findByRole('option', { name: 'Japanese' }))
@@ -1541,7 +1577,6 @@ describe('greenfield editor', () => {
     await user.click(screen.getByRole('button', { name: 'Processing settings' }))
 
     expect(screen.getByRole('button', { name: /Scope Project/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Stages 2 stages/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Output Japanese/ })).toBeInTheDocument()
   })
 

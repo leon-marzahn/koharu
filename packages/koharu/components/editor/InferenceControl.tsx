@@ -16,34 +16,45 @@ import { useTranslation } from 'react-i18next'
 
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPicker'
+import {
+  modelNames,
+  modelOptions,
+  defaultModel,
+  replaceStage,
+  stageModel,
+  type ModelName,
+  type ModelStage,
+} from '@/components/preferences/models'
 import { call, refreshTranslationModels, savePreferences } from '@/lib/backend'
-import { pipelineStages, receivePreferences, useKoharuStore, type PipelineScope } from '@/lib/store'
+import { receivePreferences, useKoharuStore, type PipelineScope } from '@/lib/store'
 import { modelKey, providerName } from '@/lib/translation'
 import {
   commands,
   type Model,
   type ModelSelection,
+  type Operation,
   type ProviderPreference,
-  type Stage,
 } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'
 
-type SelectorView = 'root' | 'model' | 'scope' | 'stages' | 'output'
+type SelectorView = 'root' | 'model' | 'scope' | 'ocr' | 'inpainting' | 'output'
+
+const full: Operation = { operation: 'full' }
+const translateOnly: Operation = { operation: 'only', stage: 'translation' }
+const inpaintOnly: Operation = { operation: 'only', stage: 'inpainting' }
 
 export function InferenceControl({
   onRun,
   disabled,
 }: {
-  onRun: (scope: PipelineScope, stages: Stage[]) => void
+  onRun: (scope: PipelineScope, operation: Operation) => void
   disabled: boolean
 }) {
   const { t } = useTranslation()
   const scope = useKoharuStore((state) => state.processingScope)
-  const stages = useKoharuStore((state) => state.processingStages)
   const setScope = useKoharuStore((state) => state.setProcessingScope)
-  const setStages = useKoharuStore((state) => state.setProcessingStages)
   const jobs = useKoharuStore((state) => state.jobs)
   const selectedPages = useKoharuStore((state) => state.selectedPages)
   const running = Object.values(jobs).find((job) => job.state === 'running') ?? null
@@ -58,11 +69,11 @@ export function InferenceControl({
     <div className='flex items-center gap-1'>
       <RuntimeSelector
         scope={scope}
-        stages={stages}
         selectionCount={selectedPages.length}
         running={Boolean(running)}
+        canRun={!disabled && !unavailable}
         onScopeChange={setScope}
-        onStagesChange={setStages}
+        onRun={(operation) => onRun(scope, operation)}
       />
 
       <Button
@@ -74,7 +85,7 @@ export function InferenceControl({
         )}
         disabled={(disabled || unavailable) && !running}
         aria-label={running ? t('inference.stopProcessing') : t('inference.runProcessing')}
-        onClick={running ? stop : () => onRun(scope, stages)}
+        onClick={running ? stop : () => onRun(scope, full)}
       >
         {running ? <Square className='size-3 fill-current' /> : <Play className='size-3' />}
         <span>{running ? t('inference.stop') : t('inference.run')}</span>
@@ -85,18 +96,18 @@ export function InferenceControl({
 
 function RuntimeSelector({
   scope,
-  stages,
   selectionCount,
   running,
+  canRun,
   onScopeChange,
-  onStagesChange,
+  onRun,
 }: {
   scope: PipelineScope
-  stages: Stage[]
   selectionCount: number
   running: boolean
+  canRun: boolean
   onScopeChange: (scope: PipelineScope) => void
-  onStagesChange: (stages: Stage[]) => void
+  onRun: (operation: Operation) => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -191,14 +202,26 @@ function RuntimeSelector({
       .finally(() => setSavingOutput(false))
   }
 
-  const toggleStage = (stage: Stage) => {
-    if (stages.includes(stage)) {
-      if (stages.length > 1) onStagesChange(stages.filter((candidate) => candidate !== stage))
+  const pipeline = preferences?.pipeline ?? null
+  const chooseProcessor = (stage: Exclude<ModelStage, 'detection'>, name: ModelName) => {
+    if (!preferences || !pipeline || running) return
+    if (pipeline[stage].model === name) {
+      setView('root')
       return
     }
-    onStagesChange(
-      pipelineStages.filter((candidate) => candidate === stage || stages.includes(candidate)),
-    )
+    // Pick up the stored profile (prompts etc.) of the chosen model instead of resetting it.
+    const switched = { ...pipeline, [stage]: defaultModel(name) }
+    const next = replaceStage(pipeline, stage, stageModel(switched, stage))
+    void savePreferences(next, preferences.providers, preferences.typesetting)
+      .then(receivePreferences)
+      .catch(() => undefined)
+    setView('root')
+  }
+  const processorLabel = (stage: Exclude<ModelStage, 'detection'>) =>
+    pipeline ? modelNames[pipeline[stage].model] : t('inference.notSet')
+  const runAction = (operation: Operation) => {
+    setOpen(false)
+    onRun(operation)
   }
 
   return (
@@ -238,18 +261,30 @@ function RuntimeSelector({
               onClick={() => setView('scope')}
             />
             <SelectorRow
-              label={t('inference.stages')}
-              value={
-                stages.length === 1
-                  ? t(`phase.${stages[0]}`)
-                  : t('inference.stageCount', { count: stages.length })
-              }
-              onClick={() => setView('stages')}
+              label={t('phase.ocr')}
+              value={processorLabel('ocr')}
+              onClick={() => setView('ocr')}
+            />
+            <SelectorRow
+              label={t('phase.inpainting')}
+              value={processorLabel('inpainting')}
+              onClick={() => setView('inpainting')}
             />
             <SelectorRow
               label={t('inference.output')}
               value={outputLabel}
               onClick={() => setView('output')}
+            />
+            <div className='my-1 border-t border-border/70' />
+            <RunAction
+              label={t('inference.translateOnly')}
+              disabled={!canRun || running}
+              onClick={() => runAction(translateOnly)}
+            />
+            <RunAction
+              label={t('inference.inpaintOnly')}
+              disabled={!canRun || running}
+              onClick={() => runAction(inpaintOnly)}
             />
             <div className='my-1 border-t border-border/70' />
             <Button
@@ -313,36 +348,18 @@ function RuntimeSelector({
           </SelectorPanel>
         )}
 
-        {view === 'stages' && (
-          <SelectorPanel title={t('inference.pipelineStages')} onBack={() => setView('root')}>
-            <SelectorOption
-              value='detection'
-              label={t('phase.detection')}
-              detail={t('phaseDescription.detection')}
-              selected={stages.includes('detection')}
-              onSelect={toggleStage}
-            />
-            <SelectorOption
-              value='ocr'
-              label={t('phase.ocr')}
-              detail={t('phaseDescription.ocr')}
-              selected={stages.includes('ocr')}
-              onSelect={toggleStage}
-            />
-            <SelectorOption
-              value='translation'
-              label={t('phase.translation')}
-              detail={t('phaseDescription.translation')}
-              selected={stages.includes('translation')}
-              onSelect={toggleStage}
-            />
-            <SelectorOption
-              value='inpainting'
-              label={t('phase.inpainting')}
-              detail={t('phaseDescription.inpainting')}
-              selected={stages.includes('inpainting')}
-              onSelect={toggleStage}
-            />
+        {(view === 'ocr' || view === 'inpainting') && pipeline && (
+          <SelectorPanel title={t(`phase.${view}`)} onBack={() => setView('root')}>
+            {(modelOptions[view] as ModelName[]).map((name) => (
+              <SelectorOption
+                key={name}
+                value={name}
+                label={modelNames[name]}
+                selected={pipeline[view].model === name}
+                disabled={running}
+                onSelect={(picked) => chooseProcessor(view, picked)}
+              />
+            ))}
           </SelectorPanel>
         )}
 
@@ -359,6 +376,29 @@ function RuntimeSelector({
         )}
       </PopoverContent>
     </Popover>
+  )
+}
+
+function RunAction({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type='button'
+      variant='ghost'
+      size='sm'
+      disabled={disabled}
+      className='h-8 justify-start gap-2 rounded-lg px-2 text-[11px] font-normal hover:bg-primary/10'
+      onClick={onClick}
+    >
+      <Play className='size-3 text-primary' /> {label}
+    </Button>
   )
 }
 
@@ -429,7 +469,7 @@ function SelectorOption<Value extends string>({
 }: {
   value: Value
   label: string
-  detail: string
+  detail?: string
   selected: boolean
   disabled?: boolean
   onSelect: (value: Value) => void
@@ -445,7 +485,7 @@ function SelectorOption<Value extends string>({
     >
       <span className='min-w-0 flex-1'>
         <span className='block text-[11px]'>{label}</span>
-        <span className='block text-[9px] text-muted-foreground'>{detail}</span>
+        {detail && <span className='block text-[9px] text-muted-foreground'>{detail}</span>}
       </span>
       {selected && <Check className='size-3.5 shrink-0 text-primary' />}
     </Button>

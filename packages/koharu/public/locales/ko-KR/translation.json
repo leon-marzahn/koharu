@@ -128,11 +128,11 @@
     "currentPageDescription": "캔버스의 페이지만 처리합니다.",
     "entireProject": "전체 프로젝트",
     "entireProjectDescription": "이 프로젝트의 모든 페이지를 처리합니다.",
+    "inpaintOnly": "인페인팅",
     "model": "모델",
     "noModel": "모델 없음",
     "notSet": "설정되지 않음",
     "output": "출력",
-    "pipelineStages": "파이프라인 단계",
     "providerDefault": "제공자 기본값",
     "run": "실행",
     "runProcessing": "처리 실행",
@@ -149,12 +149,9 @@
     "selectedPages": "선택한 페이지",
     "selector": "처리 설정",
     "shortcuts": "처리 옵션",
-    "stageCount": "{{count}}단계",
-    "stageCount_one": "{{count}}단계",
-    "stageCount_other": "{{count}}단계",
-    "stages": "단계",
     "stop": "중지",
-    "stopProcessing": "처리 중지"
+    "stopProcessing": "처리 중지",
+    "translateOnly": "번역"
   },
   "inspector": {
     "alignBottom": "아래 정렬",

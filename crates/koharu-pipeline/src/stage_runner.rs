@@ -55,16 +55,17 @@ impl StageRunner {
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
         }
-        let skip = self.stages.skip(job.stage, &job.input).map_err(|error| {
-            self.stage_error(
-                job.stage,
-                model,
-                AttemptFailure {
-                    kind: ErrorKind::Processing,
-                    error,
-                },
-            )
-        })?;
+        let skip = !job.forced
+            && self.stages.skip(job.stage, &job.input).map_err(|error| {
+                self.stage_error(
+                    job.stage,
+                    model,
+                    AttemptFailure {
+                        kind: ErrorKind::Processing,
+                        error,
+                    },
+                )
+            })?;
         if skip {
             return Ok(StageOutcome::Skipped);
         }
@@ -169,6 +170,8 @@ pub(crate) struct StageJob {
     input: StageInput,
     stop: StopToken,
     progress: Option<ProgressSink>,
+    /// An explicit single-stage run the user asked for: do not skip because output exists.
+    forced: bool,
 }
 
 impl StageJob {
@@ -177,12 +180,14 @@ impl StageJob {
         input: StageInput,
         stop: StopToken,
         progress: Option<ProgressSink>,
+        forced: bool,
     ) -> Self {
         Self {
             stage,
             input,
             stop,
             progress,
+            forced,
         }
     }
 }

@@ -128,11 +128,11 @@
     "currentPageDescription": "Procesa solo la página del lienzo.",
     "entireProject": "Proyecto completo",
     "entireProjectDescription": "Procesa todas las páginas de este proyecto.",
+    "inpaintOnly": "Rellenar",
     "model": "Modelo",
     "noModel": "Sin modelo",
     "notSet": "Sin definir",
     "output": "Salida",
-    "pipelineStages": "Etapas del flujo",
     "providerDefault": "Predeterminado del proveedor",
     "run": "Ejecutar",
     "runProcessing": "Ejecutar procesamiento",
@@ -149,12 +149,9 @@
     "selectedPages": "Páginas seleccionadas",
     "selector": "Ajustes de procesamiento",
     "shortcuts": "Opciones de procesamiento",
-    "stageCount": "{{count}} etapas",
-    "stageCount_one": "{{count}} etapas",
-    "stageCount_other": "{{count}} etapas",
-    "stages": "Etapas",
     "stop": "Detener",
-    "stopProcessing": "Detener procesamiento"
+    "stopProcessing": "Detener procesamiento",
+    "translateOnly": "Traducir"
   },
   "inspector": {
     "alignBottom": "Alinear abajo",

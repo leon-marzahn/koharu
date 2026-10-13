@@ -9,8 +9,8 @@ use futures::{StreamExt as _, stream::FuturesUnordered};
 use koharu_scene::{EntityId, Snapshot};
 
 use crate::{
-    Committer, ErrorKind, PipelineError, Progress, ProgressSink, Report, Request, RunStatus, Stage,
-    StageOutput, StopToken,
+    Committer, ErrorKind, Operation, PipelineError, Progress, ProgressSink, Report, Request,
+    RunStatus, Stage, StageOutput, StopToken,
     images::ImageCache,
     progress,
     resources::ResourceMonitor,
@@ -36,6 +36,17 @@ pub(crate) struct Execution<'a> {
     base: koharu_scene::Revision,
     started: Instant,
     inpainting_mask: Option<crate::InpaintingMask>,
+    force_inpainting: bool,
+}
+
+/// "Inpaint" on its own is a retry: redo pages that already have a cleanup layer.
+fn forces_inpainting(operation: &Operation) -> bool {
+    matches!(
+        operation,
+        Operation::Only {
+            stage: Stage::Inpainting
+        }
+    )
 }
 
 impl<'a> Execution<'a> {
@@ -48,6 +59,7 @@ impl<'a> Execution<'a> {
     ) -> std::result::Result<Self, PipelineError> {
         let started = Instant::now();
         let base = snapshot.revision();
+        let force_inpainting = forces_inpainting(&request.operation);
         let stages = request
             .operation
             .stages()
@@ -88,6 +100,7 @@ impl<'a> Execution<'a> {
             base,
             started,
             inpainting_mask: request.inpainting_mask,
+            force_inpainting,
         })
     }
 
@@ -147,6 +160,7 @@ impl<'a> Execution<'a> {
             ),
             self.stop.clone(),
             self.progress.clone(),
+            self.force_inpainting && stage == Stage::Inpainting,
         ))
     }
 
@@ -272,4 +286,23 @@ fn validate_commit(previous: &Snapshot, next: &Snapshot) -> Result<()> {
         "committer did not advance the scene revision"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod force_tests {
+    use super::*;
+
+    #[test]
+    fn only_a_lone_inpainting_run_overrides_the_skip() {
+        assert!(forces_inpainting(&Operation::Only {
+            stage: Stage::Inpainting
+        }));
+        assert!(!forces_inpainting(&Operation::Full));
+        assert!(!forces_inpainting(&Operation::Only {
+            stage: Stage::Translation
+        }));
+        assert!(!forces_inpainting(&Operation::Stages {
+            stages: vec![Stage::Ocr, Stage::Inpainting]
+        }));
+    }
 }

@@ -128,11 +128,11 @@
     "currentPageDescription": "Обработать только страницу на холсте.",
     "entireProject": "Весь проект",
     "entireProjectDescription": "Обработать все страницы проекта.",
+    "inpaintOnly": "Закрасить",
     "model": "Модель",
     "noModel": "Нет модели",
     "notSet": "Не задано",
     "output": "Результат",
-    "pipelineStages": "Этапы конвейера",
     "providerDefault": "По умолчанию у провайдера",
     "run": "Запустить",
     "runProcessing": "Запустить обработку",
@@ -149,12 +149,9 @@
     "selectedPages": "Выбранные страницы",
     "selector": "Настройки обработки",
     "shortcuts": "Параметры обработки",
-    "stageCount": "Этапов: {{count}}",
-    "stageCount_one": "Этапов: {{count}}",
-    "stageCount_other": "Этапов: {{count}}",
-    "stages": "Этапы",
     "stop": "Остановить",
-    "stopProcessing": "Остановить обработку"
+    "stopProcessing": "Остановить обработку",
+    "translateOnly": "Перевести"
   },
   "inspector": {
     "alignBottom": "Выровнять по нижнему краю",

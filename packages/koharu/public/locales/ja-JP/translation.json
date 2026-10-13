@@ -128,11 +128,11 @@
     "currentPageDescription": "キャンバスに表示中のページだけを処理します。",
     "entireProject": "プロジェクト全体",
     "entireProjectDescription": "このプロジェクトの全ページを処理します。",
+    "inpaintOnly": "インペイント",
     "model": "モデル",
     "noModel": "モデルなし",
     "notSet": "未設定",
     "output": "出力",
-    "pipelineStages": "パイプラインの工程",
     "providerDefault": "プロバイダーの既定値",
     "run": "実行",
     "runProcessing": "処理を実行",
@@ -149,12 +149,9 @@
     "selectedPages": "選択したページ",
     "selector": "処理設定",
     "shortcuts": "処理オプション",
-    "stageCount": "{{count}}工程",
-    "stageCount_one": "{{count}}工程",
-    "stageCount_other": "{{count}}工程",
-    "stages": "工程",
     "stop": "停止",
-    "stopProcessing": "処理を停止"
+    "stopProcessing": "処理を停止",
+    "translateOnly": "翻訳"
   },
   "inspector": {
     "alignBottom": "下揃え",

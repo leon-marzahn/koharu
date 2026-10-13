@@ -9,13 +9,13 @@
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The Stages row and checklist are gone; nothing else relied on `processingStages` (remove the store field and its persisted value, or keep it only if something still reads it)
-- [ ] "Translate" runs only the translation stage on the current scope; "Inpaint" runs only inpainting; both respect the scope selector and the stop button
-- [ ] Run all runs the full pipeline exactly as before
-- [ ] OCR and inpainting model rows sit where Stages was; choosing one saves the preference and the next run uses it
-- [ ] Rerunning "Translate" on a translated page replaces the machine translation and keeps lines the user edited
-- [ ] New strings are in every locale; component tests cover each action's `process` arguments and the preference writes
+- [x] The Stages row and checklist are gone; nothing else relied on `processingStages` (remove the store field and its persisted value, or keep it only if something still reads it)
+- [x] "Translate" runs only the translation stage on the current scope; "Inpaint" runs only inpainting; both respect the scope selector and the stop button
+- [x] Run all runs the full pipeline exactly as before
+- [x] OCR and inpainting model rows sit where Stages was; choosing one saves the preference and the next run uses it
+- [x] Rerunning "Translate" on a translated page replaces the machine translation and keeps lines the user edited
+- [x] New strings are in every locale; component tests cover each action's `process` arguments and the preference writes
 
 **Open question:** whether Detect and OCR also deserve their own buttons. Not in v1: the user said they run all, translate, or inpaint.

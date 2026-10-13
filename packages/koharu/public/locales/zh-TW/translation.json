@@ -128,11 +128,11 @@
     "currentPageDescription": "只處理畫布中的頁面。",
     "entireProject": "整個專案",
     "entireProjectDescription": "處理此專案中的每個頁面。",
+    "inpaintOnly": "修復",
     "model": "模型",
     "noModel": "無模型",
     "notSet": "未設定",
     "output": "輸出",
-    "pipelineStages": "處理流程階段",
     "providerDefault": "提供者預設值",
     "run": "執行",
     "runProcessing": "執行處理",
@@ -149,12 +149,9 @@
     "selectedPages": "選取的頁面",
     "selector": "處理設定",
     "shortcuts": "處理選項",
-    "stageCount": "{{count}} 個階段",
-    "stageCount_one": "{{count}} 個階段",
-    "stageCount_other": "{{count}} 個階段",
-    "stages": "階段",
     "stop": "停止",
-    "stopProcessing": "停止處理"
+    "stopProcessing": "停止處理",
+    "translateOnly": "翻譯"
   },
   "inspector": {
     "alignBottom": "底端對齊",

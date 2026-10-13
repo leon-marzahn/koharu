@@ -128,11 +128,11 @@
     "currentPageDescription": "Processa somente a página na tela.",
     "entireProject": "Projeto inteiro",
     "entireProjectDescription": "Processa todas as páginas deste projeto.",
+    "inpaintOnly": "Preencher",
     "model": "Modelo",
     "noModel": "Sem modelo",
     "notSet": "Não definido",
     "output": "Saída",
-    "pipelineStages": "Etapas do pipeline",
     "providerDefault": "Padrão do provedor",
     "run": "Executar",
     "runProcessing": "Executar processamento",
@@ -149,12 +149,9 @@
     "selectedPages": "Páginas selecionadas",
     "selector": "Configurações de processamento",
     "shortcuts": "Opções de processamento",
-    "stageCount": "{{count}} etapas",
-    "stageCount_one": "{{count}} etapas",
-    "stageCount_other": "{{count}} etapas",
-    "stages": "Etapas",
     "stop": "Parar",
-    "stopProcessing": "Parar processamento"
+    "stopProcessing": "Parar processamento",
+    "translateOnly": "Traduzir"
   },
   "inspector": {
     "alignBottom": "Alinhar embaixo",

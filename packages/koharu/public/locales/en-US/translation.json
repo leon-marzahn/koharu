@@ -128,11 +128,11 @@
     "currentPageDescription": "Process only the page in the canvas.",
     "entireProject": "Entire project",
     "entireProjectDescription": "Process every page in this project.",
+    "inpaintOnly": "Inpaint",
     "model": "Model",
     "noModel": "No model",
     "notSet": "Not set",
     "output": "Output",
-    "pipelineStages": "Pipeline stages",
     "providerDefault": "Provider default",
     "run": "Run",
     "runProcessing": "Run processing",
@@ -149,12 +149,9 @@
     "selectedPages": "Selected pages",
     "selector": "Processing settings",
     "shortcuts": "Processing options",
-    "stageCount": "{{count}} stages",
-    "stageCount_one": "{{count}} stage",
-    "stageCount_other": "{{count}} stages",
-    "stages": "Stages",
     "stop": "Stop",
-    "stopProcessing": "Stop processing"
+    "stopProcessing": "Stop processing",
+    "translateOnly": "Translate"
   },
   "inspector": {
     "alignBottom": "Align bottom",
