@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 Previous-page hints, 05 Character sheet (manual), 06 Term list (manual)
 
-**Status:** done
+**Status:** done (scene description item waits for ticket 11)
 
 - [x] Only the selected segment is translated
 - [x] Request contains the same context sources as a full run
