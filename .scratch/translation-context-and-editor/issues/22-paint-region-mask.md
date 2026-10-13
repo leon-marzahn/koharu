@@ -13,7 +13,7 @@ The explicit "only inpainting" run already overrides the skip for pages that hav
 
 **Blocked by:** none (14 and 20 are merged)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] On a page where the detector found no text, drawing a region and pressing Inpaint (page scope) cleans that region (test through the real stage with a user-origin region and an empty detector mask)
 - [ ] Detector regions and pages without user regions behave exactly as before (existing inpainting tests still pass)
