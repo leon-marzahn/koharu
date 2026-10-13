@@ -11,7 +11,12 @@ import { ToolBar } from '@/components/editor/ToolBar'
 import { useCanvas } from '@/components/editor/useCanvas'
 import { call } from '@/lib/backend'
 import { copyBoxes, copyStyle, pasteBoxes, pasteStyle } from '@/lib/clipboard'
-import { defaultTypography, expandLayerSelection, isTextLayer } from '@/lib/document'
+import {
+  defaultTypography,
+  expandLayerSelection,
+  isTextLayer,
+  stepTypography,
+} from '@/lib/document'
 import {
   controlFrame,
   draftFrame,
@@ -43,7 +48,6 @@ import {
   type CanvasTool,
 } from '@/lib/store'
 import { prefetchCanvasPages, workspaceColor, type CanvasColor } from '@koharu/bridge/canvas'
-import type { Typography } from '@koharu/bridge/protocol'
 import { commands, type Frame, type Point, type TransformFrame } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
@@ -83,17 +87,6 @@ interface CanvasView {
 interface StrokeUpdate {
   kind: 'paint' | 'erase' | 'inpaint'
   points: Point[]
-}
-
-const clampStep = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
-
-/** Cmd+Up/Down: auto-fit boxes step the fit scale by 5% (Shift: 25%); fixed ones the size by 1 (Shift: 10). */
-export function stepTypography(typography: Typography, dir: number, big: boolean): Typography {
-  if (typography.auto_fit) {
-    const percent = (typography.fit_scale ?? 1) * 100 + dir * (big ? 25 : 5)
-    return { ...typography, fit_scale: Math.round(clampStep(percent, 50, 300)) / 100 }
-  }
-  return { ...typography, size: clampStep((typography.size ?? 24) + dir * (big ? 10 : 1), 1, 300) }
 }
 
 export function CanvasWorkspace() {

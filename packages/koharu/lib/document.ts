@@ -13,6 +13,17 @@ export const defaultTypography: Typography = {
   writing_mode: null,
 }
 
+const clampStep = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+/** Cmd+Up/Down: auto-fit boxes step the fit scale by 5% (Shift: 25%); fixed ones the size by 1 (Shift: 10). */
+export function stepTypography(typography: Typography, dir: number, big: boolean): Typography {
+  if (typography.auto_fit) {
+    const percent = (typography.fit_scale ?? 1) * 100 + dir * (big ? 25 : 5)
+    return { ...typography, fit_scale: Math.round(clampStep(percent, 50, 300)) / 100 }
+  }
+  return { ...typography, size: clampStep((typography.size ?? 24) + dir * (big ? 10 : 1), 1, 300) }
+}
+
 export function isTextLayer(layer: Layer): layer is Extract<Layer, { type: 'text' }> {
   return layer.type === 'text'
 }
