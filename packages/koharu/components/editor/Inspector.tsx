@@ -972,6 +972,22 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
                   .catch(() => undefined)
               }
             />
+            <Button
+              type='button'
+              variant='ghost'
+              size='xs'
+              data-testid={`translate-box-${layer.id}`}
+              className='h-5 justify-self-end rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
+              onClick={() =>
+                void call(
+                  commands.process,
+                  { scope: 'entities', value: [layer.id] },
+                  { operation: 'only', stage: 'translation' },
+                ).catch(() => undefined)
+              }
+            >
+              {t('inference.translateOnly')}
+            </Button>
           </InspectorField>
         </>
       )}

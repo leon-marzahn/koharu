@@ -36,11 +36,19 @@ pub struct Edit {
     attachments: Vec<(BlobId, bytes::Bytes)>,
     validate_entities: HashSet<EntityId>,
     generation: Option<Generation>,
+    replace_user: bool,
 }
 
 impl Edit {
+    /// Lets a generated edit replace user-owned components: for an explicit user request such as
+    /// "translate this box", where the result is the user's choice and undoes as one revision.
+    pub fn replace_user_edits(&mut self) {
+        self.replace_user = true;
+    }
+
     pub(crate) fn new(base: Snapshot, generation: Option<Generation>) -> Self {
         Self {
+            replace_user: false,
             state: (*base.state).clone(),
             base,
             observations: BTreeSet::new(),
@@ -823,6 +831,7 @@ impl Edit {
             return Ok(());
         };
         match existing {
+            Origin::User if self.replace_user => Ok(()),
             Origin::User => Err(Error::Authorship(
                 "pipeline cannot overwrite or remove a user-owned component".to_owned(),
             )),

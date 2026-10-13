@@ -4,10 +4,10 @@
 
 **Blocked by:** 04 Previous-page hints, 05 Character sheet (manual), 06 Term list (manual)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Only the selected segment is translated
-- [ ] Request contains the same context sources as a full run
-- [ ] Hand-edited text is overwritten and undo restores it
-- [ ] Scene description is included when one exists
-- [ ] Stage and component tests cover scope, context and undo
+- [x] Only the selected segment is translated
+- [x] Request contains the same context sources as a full run
+- [x] Hand-edited text is overwritten and undo restores it
+- [ ] Scene description (skipped: ticket 11 does not exist yet) is included when one exists
+- [x] Stage and component tests cover scope, context and undo

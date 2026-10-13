@@ -288,22 +288,35 @@ impl StageProcessor for Processor {
 
     async fn process(&self, input: StageInput) -> Result<koharu_scene::Patch> {
         let mut targets = Vec::new();
+        // Entity scope translates only the chosen segments; the page's other segments go to the
+        // model as context so a single box reads like it does in a full run.
+        let mut siblings = Vec::new();
         if let Some(group) = input.scene.page(input.page)?.text_group()? {
             for layer in group.text_layers()? {
-                if !input.contains_entity(layer.id())? {
-                    continue;
-                }
+                let in_scope = input.contains_entity(layer.id())?;
                 let content = layer.content()?;
                 let Some(source) = content.source()? else {
                     continue;
                 };
-                if !source.text.value.trim().is_empty() {
+                if source.text.value.trim().is_empty() {
+                    continue;
+                }
+                if in_scope {
                     targets.push((content.id(), source.text.value));
+                } else if input.entities.is_some() {
+                    let translation = content.translation()?;
+                    siblings.push(TranslationContext {
+                        source: source.text.value,
+                        user_corrected: translation
+                            .as_ref()
+                            .is_some_and(|t| matches!(t.text.origin, Origin::User)),
+                        translation: translation.map(|t| t.text.value).unwrap_or_default(),
+                    });
                 }
             }
         }
         // Every context source (hints today; character sheet, term list later) appends here.
-        let mut context = Vec::new();
+        let mut context = siblings;
         context.extend(previous_page_hints(
             &input.scene,
             input.page,
@@ -340,6 +353,9 @@ impl StageProcessor for Processor {
         let language = LanguageTag::new(self.config.target_language.tag())?;
         let generated = generation(PRODUCER, provider)?;
         let mut edit = input.scene.edit_as(generated.clone());
+        if input.entities.is_some() {
+            edit.replace_user_edits();
+        }
         for (entity, _) in &targets {
             edit.observe::<SourceText>(*entity)?;
             edit.observe::<Translation>(*entity)?;
@@ -357,12 +373,14 @@ impl StageProcessor for Processor {
             translated.segments,
             &language,
             &generated,
+            // An entity-scoped run is the user asking for these boxes, so it replaces their edits.
+            input.entities.is_some(),
         )?;
         finish(edit)
     }
 }
 
-/// Writes generated translations, keeping hand-edited ones, and clears the page's stale
+/// Writes generated translations, keeping hand-edited ones unless `overwrite_user`, and clears the page's stale
 /// marker: the page is now translated against the current sheet and term list.
 fn write_translations(
     scene: &Snapshot,
@@ -372,11 +390,13 @@ fn write_translations(
     segments: Vec<String>,
     language: &LanguageTag,
     generated: &Generation,
+    overwrite_user: bool,
 ) -> Result<()> {
     for ((entity, source), text) in targets.into_iter().zip(segments) {
-        if scene
-            .component::<Translation>(entity)?
-            .is_some_and(|value| matches!(value.text.origin, Origin::User))
+        if !overwrite_user
+            && scene
+                .component::<Translation>(entity)?
+                .is_some_and(|value| matches!(value.text.origin, Origin::User))
         {
             continue;
         }
@@ -393,7 +413,8 @@ fn write_translations(
             },
         )?;
     }
-    if scene.component::<StalePage>(page)?.is_some() {
+    // A one-box run (overwrite_user) leaves the rest of the page stale.
+    if !overwrite_user && scene.component::<StalePage>(page)?.is_some() {
         edit.remove::<StalePage>(page)?;
     }
     Ok(())
@@ -867,6 +888,7 @@ mod tests {
             vec!["new".into(), "overwritten".into()],
             &language,
             &generated,
+            false,
         )
         .unwrap();
         let scene = session
@@ -885,5 +907,33 @@ mod tests {
         };
         assert_eq!((text(machine), text(manual)), ("new".into(), "mine".into()));
         assert!(scene.component::<StalePage>(page).unwrap().is_none());
+
+        // One-box translate overwrites the hand edit as a single commit; undo restores it.
+        let mut edit = scene.edit_as(generated.clone());
+        edit.replace_user_edits();
+        write_translations(
+            &scene,
+            &mut edit,
+            page,
+            vec![(manual, "b".into())],
+            vec!["fresh".into()],
+            &language,
+            &generated,
+            true,
+        )
+        .unwrap();
+        let commit = session.commit(edit.finish().unwrap()).await.unwrap();
+        assert_eq!(text_of(&commit.snapshot, manual), "fresh");
+        let undone = session.undo(commit.revision).await.unwrap().snapshot;
+        assert_eq!(text_of(&undone, manual), "mine");
+    }
+
+    fn text_of(scene: &Snapshot, entity: EntityId) -> String {
+        scene
+            .component::<Translation>(entity)
+            .unwrap()
+            .unwrap()
+            .text
+            .value
     }
 }

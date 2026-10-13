@@ -901,6 +901,19 @@ describe('greenfield editor', () => {
     )
   })
 
+  it('translates only the selected box through the entity scope', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const process = vi.spyOn(commands, 'process').mockResolvedValue('job' as never)
+    render(<Inspector />)
+
+    await user.click(screen.getByTestId('translate-box-element'))
+    expect(process).toHaveBeenCalledWith(
+      { scope: 'entities', value: ['element'] },
+      { operation: 'only', stage: 'translation' },
+    )
+  })
+
   it('steps font size by exactly 1 and keeps presets working', async () => {
     const user = userEvent.setup()
     installProject()
