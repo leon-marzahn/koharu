@@ -648,9 +648,11 @@ export type TranslationConfig = {
 	 */
 	description_model?: ModelSelection | null,
 	/**
-	 *  Generation settings for the description call only. Defaults to `reasoning: None` so no
-	 *  `reasoning_effort` is sent and the provider's own setting (e.g. LM Studio's thinking
-	 *  toggle) decides; the Settings page offers no reasoning control for it.
+	 *  Generation settings for the description call only; read through `description_generation()`.
+	 *  Unset means `reasoning: None`, so no `reasoning_effort` is sent and the provider's own
+	 *  setting (e.g. LM Studio's thinking toggle) decides; Settings offers no reasoning control.
+	 *  `Option` rather than a defaulted struct: an optional nested object breaks the generated
+	 *  bridge transform in `protocol.ts`.
 	 */
 	description_generation?: GenerationConfig | null,
 	/**  Appended to the describe system prompt. The translation `instructions` are never sent. */
