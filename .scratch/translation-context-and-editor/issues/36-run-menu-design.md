@@ -45,7 +45,7 @@ Notes for the workflow this serves: (1) rough bulk run with Previous pages (desc
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done (design delivered; implementation tickets follow the chosen option)
 
 - [ ] `design/36-run-menu.md` exists with the sections above
 - [ ] Every claim about current behaviour is checked against the code, with file references
