@@ -310,6 +310,8 @@
     "pages": "ページ",
     "stale": "要更新",
     "retranslateStale": "古い{{count}}ページを再翻訳",
+    "markUpToDate": "最新としてマーク",
+    "markAllUpToDate": "すべて最新としてマーク",
     "retranslateAll": "すべてのページを再翻訳",
     "rename": "名前を変更",
     "renameDescription": "このページの新しい名前を入力します。",

@@ -425,6 +425,21 @@ impl Project {
             .collect()
     }
 
+    /// Clears the stale marker on the given pages as one commit. Pages that are not stale are skipped.
+    pub(crate) async fn dismiss_stale(&mut self, pages: &[EntityId]) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let patch = snapshot.patch(|edit| {
+            for &page in pages {
+                snapshot.page(page)?;
+                if snapshot.component::<StalePage>(page)?.is_some() {
+                    edit.remove::<StalePage>(page)?;
+                }
+            }
+            Ok(())
+        })?;
+        self.commit(patch).await
+    }
+
     /// `None` is Todo and removes the component, so every change is one commit.
     pub(crate) async fn set_page_status(
         &mut self,
@@ -1866,6 +1881,33 @@ mod tests {
 
         project.undo().await.unwrap();
         assert_eq!(status(&project), None);
+    }
+
+    #[tokio::test]
+    async fn dismissing_stale_clears_markers_in_one_undo_step() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        let a = page_with_source(&mut project, "a", "魔王").await;
+        let b = page_with_source(&mut project, "b", "魔王").await;
+        let c = page_with_source(&mut project, "c", "何もない").await;
+        let term = Term {
+            source: "魔王".into(),
+            target: "Demon King".into(),
+            note: String::new(),
+        };
+        project.set_terms(vec![term]).await.unwrap();
+        assert_eq!(stale(&project), ["a", "b"]);
+
+        let commit = project.dismiss_stale(&[a]).await.unwrap();
+        project.record_commit(&commit);
+        assert_eq!(stale(&project), ["b"]);
+
+        // Many pages, including one that is not stale, in one commit.
+        let commit = project.dismiss_stale(&[a, b, c]).await.unwrap();
+        project.record_commit(&commit);
+        assert!(stale(&project).is_empty());
+
+        project.undo().await.unwrap();
+        assert_eq!(stale(&project), ["b"]);
     }
 
     #[tokio::test]

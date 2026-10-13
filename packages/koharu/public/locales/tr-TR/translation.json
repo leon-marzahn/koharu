@@ -310,6 +310,8 @@
     "pages": "Sayfalar",
     "stale": "Eski",
     "retranslateStale": "{{count}} eski sayfayı yeniden çevir",
+    "markUpToDate": "Güncel olarak işaretle",
+    "markAllUpToDate": "Tümünü güncel olarak işaretle",
     "retranslateAll": "Tüm sayfaları yeniden çevir",
     "rename": "Yeniden adlandır",
     "renameDescription": "Bu sayfa için yeni bir ad seçin.",

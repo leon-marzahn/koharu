@@ -235,6 +235,11 @@ export function PageRail() {
       only,
     )
 
+  const dismissStale = (ids: string[]) =>
+    void call(commands.dismissStale, ids)
+      .then(() => refresh(pagesKey))
+      .catch(() => undefined)
+
   const setStatus = (page: string, status: PageStatus | null) =>
     void call(commands.setPageStatus, page, status)
       .then(() => refresh(projectKey, pagesKey))
@@ -328,6 +333,17 @@ export function PageRail() {
                 {t('navigator.retranslateStale', { count: staleIds.length })}
               </Button>
             )}
+            {staleIds.length > 0 && (
+              <Button
+                type='button'
+                size='sm'
+                variant='ghost'
+                className='h-6 justify-start text-[10px]'
+                onClick={() => dismissStale(staleIds)}
+              >
+                {t('navigator.markAllUpToDate')}
+              </Button>
+            )}
             <Button
               type='button'
               size='sm'
@@ -383,6 +399,7 @@ export function PageRail() {
                       onDragStart={() => setDragged(page.id)}
                       onDragEnd={() => setDragged(null)}
                       onSetStatus={(status) => setStatus(page.id, status)}
+                      onDismissStale={() => dismissStale([page.id])}
                       onRename={() => openRename(page)}
                       onDelete={() => deletePage(page.id)}
                       onDrop={() => {
@@ -527,6 +544,7 @@ function PageItem({
   onDragStart,
   onDragEnd,
   onSetStatus,
+  onDismissStale,
   onRename,
   onDelete,
   onDrop,
@@ -540,6 +558,7 @@ function PageItem({
   onDragStart: () => void
   onDragEnd: () => void
   onSetStatus: (status: PageStatus | null) => void
+  onDismissStale: () => void
   onRename: () => void
   onDelete: () => void
   onDrop: () => void
@@ -621,6 +640,11 @@ function PageItem({
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
               <DropdownMenuItem onClick={onRename}>{t('navigator.rename')}</DropdownMenuItem>
+              {page.stale && (
+                <DropdownMenuItem onClick={onDismissStale}>
+                  {t('navigator.markUpToDate')}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               {statuses.map((status) => (
                 <DropdownMenuItem

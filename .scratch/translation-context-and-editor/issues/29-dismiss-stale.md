@@ -9,10 +9,10 @@ Out of scope: a project setting to stop pages from being marked stale, and per-t
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] One page can be marked up to date from the rail; the badge disappears
-- [ ] "Mark all as up to date" clears every stale page, one undo step
-- [ ] Undo brings the marker back
-- [ ] A page that was not stale is a no-op
-- [ ] Rust test for the command (single, many, non-stale page, undo); component test through the real rail path; nine locales for the new strings
+- [x] One page can be marked up to date from the rail; the badge disappears
+- [x] "Mark all as up to date" clears every stale page, one undo step
+- [x] Undo brings the marker back
+- [x] A page that was not stale is a no-op
+- [x] Rust test for the command (single, many, non-stale page, undo); component test through the real rail path; nine locales for the new strings

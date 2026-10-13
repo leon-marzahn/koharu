@@ -310,6 +310,8 @@
     "pages": "Pages",
     "stale": "Stale",
     "retranslateStale": "Retranslate {{count}} stale pages",
+    "markUpToDate": "Mark as up to date",
+    "markAllUpToDate": "Mark all as up to date",
     "retranslateAll": "Retranslate all pages",
     "rename": "Rename",
     "renameDescription": "Choose a new name for this page.",

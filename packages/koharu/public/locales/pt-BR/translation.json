@@ -310,6 +310,8 @@
     "pages": "Páginas",
     "stale": "Desatualizada",
     "retranslateStale": "Retraduzir {{count}} páginas desatualizadas",
+    "markUpToDate": "Marcar como atualizada",
+    "markAllUpToDate": "Marcar todas como atualizadas",
     "retranslateAll": "Retraduzir todas as páginas",
     "rename": "Renomear",
     "renameDescription": "Escolha um novo nome para esta página.",

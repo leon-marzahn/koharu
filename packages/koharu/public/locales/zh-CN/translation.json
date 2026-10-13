@@ -310,6 +310,8 @@
     "pages": "页面",
     "stale": "已过期",
     "retranslateStale": "重新翻译 {{count}} 个过期页面",
+    "markUpToDate": "标记为最新",
+    "markAllUpToDate": "全部标记为最新",
     "retranslateAll": "重新翻译所有页面",
     "rename": "重命名",
     "renameDescription": "为此页面选择一个新名称。",

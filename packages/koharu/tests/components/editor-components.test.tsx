@@ -517,6 +517,33 @@ describe('greenfield editor', () => {
     )
   })
 
+  it('marks one or all stale pages as up to date through the command', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const dismiss = vi.spyOn(commands, 'dismissStale').mockResolvedValue(null as never)
+    const page = (id: string, stale: boolean) => ({
+      id,
+      label: id,
+      size: { width: 1000, height: 1500 },
+      source_asset: 'source',
+      layer_count: 1,
+      stale,
+    })
+    queryClient.setQueryData(pagesKey, [page('p1', false), page('p2', true), page('p3', true)])
+    render(<PageRail />)
+
+    await user.click(screen.getByRole('button', { name: 'Actions for p2' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark as up to date' }))
+    expect(dismiss).toHaveBeenLastCalledWith(['p2'])
+
+    await user.click(screen.getByRole('button', { name: 'Mark all as up to date' }))
+    expect(dismiss).toHaveBeenLastCalledWith(['p2', 'p3'])
+
+    // A page that is not stale has no such action.
+    await user.click(screen.getByRole('button', { name: 'Actions for p1' }))
+    expect(screen.queryByRole('menuitem', { name: 'Mark as up to date' })).not.toBeInTheDocument()
+  })
+
   describe('page status', () => {
     const summary = (id: string, status: 'in_progress' | 'done' | null, stale = false) => ({
       id,

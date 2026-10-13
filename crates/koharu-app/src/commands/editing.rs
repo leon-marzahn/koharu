@@ -33,6 +33,19 @@ pub struct TypographyUpdate {
 
 #[tauri::command]
 #[specta::specta]
+pub(crate) async fn dismiss_stale(
+    pages: Vec<EntityId>,
+    project: State<'_, CurrentProject>,
+) -> Result<(), Error> {
+    let mut project = project.project.lock().await;
+    let project = project.as_mut().context("no project is open")?;
+    let commit = project.dismiss_stale(&pages).await?;
+    project.record_commit(&commit);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub(crate) async fn set_page_status(
     page: EntityId,
     status: Option<PageStatus>,

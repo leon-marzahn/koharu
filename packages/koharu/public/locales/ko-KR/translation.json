@@ -310,6 +310,8 @@
     "pages": "페이지",
     "stale": "오래됨",
     "retranslateStale": "오래된 {{count}}페이지 다시 번역",
+    "markUpToDate": "최신 상태로 표시",
+    "markAllUpToDate": "모두 최신 상태로 표시",
     "retranslateAll": "모든 페이지 다시 번역",
     "rename": "이름 바꾸기",
     "renameDescription": "이 페이지의 새 이름을 정하세요.",
