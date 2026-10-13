@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
     if args.json {
         println!("{}", serde_json::to_string_pretty(&translated)?);
     } else {
-        for (index, segment) in translated.iter().enumerate() {
+        for (index, segment) in translated.segments.iter().enumerate() {
             println!("[{}] {segment}", index + 1);
         }
     }

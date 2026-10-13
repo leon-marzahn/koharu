@@ -248,7 +248,7 @@ pub struct TranslationTerm {
 }
 
 /// A suggested change to an existing character, keyed by `source_name`; `None` = unchanged.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct TranslationCharacterUpdate {
     pub source_name: String,
@@ -259,7 +259,7 @@ pub struct TranslationCharacterUpdate {
 }
 
 /// A suggested change to an existing term, keyed by `source`; `None` = unchanged.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct TranslationTermUpdate {
     pub source: String,
@@ -269,7 +269,7 @@ pub struct TranslationTermUpdate {
 
 /// New characters and terms, and updates to existing ones, the model suggests; never applied
 /// without review.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 pub struct TranslationProposals {
     pub characters: Vec<TranslationCharacter>,
     pub terms: Vec<TranslationTerm>,
@@ -278,7 +278,7 @@ pub struct TranslationProposals {
 }
 
 /// A finished translation: one text per input segment, plus optional proposals.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Translated {
     pub segments: Vec<String>,
     pub proposals: TranslationProposals,
