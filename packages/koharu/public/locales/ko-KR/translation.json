@@ -437,6 +437,20 @@
       "title": "모양"
     },
     "backToEditor": "편집기로 돌아가기",
+    "description": {
+      "title": "설명",
+      "description": "번역하기 전에 비전 모델로 각 페이지를 설명하여 번역 모델이 장면을 파악하게 합니다.",
+      "model": "모델",
+      "modelDescription": "공급자 라벨은 각 모델이 실행되는 위치를 나타내며, 연결은 별도로 설정합니다.",
+      "descriptionModel": "설명 모델",
+      "descriptionModelDescription": "각 페이지를 설명할 비전 모델을 선택하세요.",
+      "noModel": "설명 모델 없음",
+      "clear": "설명하지 않음",
+      "outputDescription": "설명은 번역 페이지의 대상 언어로 작성됩니다.",
+      "instructionsDescription": "설명에 대한 추가 지침(예: 집중할 내용).",
+      "instructionsLabel": "설명 지침",
+      "instructionsPlaceholder": "페이지 설명에 대한 선택적 지침"
+    },
     "generation": {
       "description": "언어 모델이 번역문을 생성하는 방식을 조정합니다.",
       "enableReasoning": "추론 활성화",
@@ -508,6 +522,7 @@
     },
     "tabs": {
       "appearance": "모양",
+      "description": "설명",
       "pipeline": "파이프라인",
       "providers": "제공자",
       "shortcuts": "단축키",

@@ -437,6 +437,20 @@
       "title": "Appearance"
     },
     "backToEditor": "Back to editor",
+    "description": {
+      "title": "Description",
+      "description": "Describe each page with a vision model before translating, so the translator knows the scene.",
+      "model": "Model",
+      "modelDescription": "Provider labels identify where each model runs; connections are configured separately.",
+      "descriptionModel": "Description model",
+      "descriptionModelDescription": "Choose the vision model that describes each page.",
+      "noModel": "No description model",
+      "clear": "Don't describe",
+      "outputDescription": "The description is written in the Translation page's target language.",
+      "instructionsDescription": "Extra guidance for the description, such as what to focus on.",
+      "instructionsLabel": "Description instructions",
+      "instructionsPlaceholder": "Optional guidance for describing pages"
+    },
     "generation": {
       "description": "Fine-tune how language models generate translated text.",
       "enableReasoning": "Enable reasoning",
@@ -508,6 +522,7 @@
     },
     "tabs": {
       "appearance": "Appearance",
+      "description": "Description",
       "pipeline": "Pipeline",
       "providers": "Providers",
       "shortcuts": "Shortcuts",

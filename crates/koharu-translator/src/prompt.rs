@@ -1009,6 +1009,14 @@ mod tests {
     }
 
     #[test]
+    fn description_prompt_carries_its_instructions() {
+        let request = TranslationRequest::describing(Language::English)
+            .with_instructions("Name the setting.");
+        let prompt = description_system_prompt(&request);
+        assert!(prompt.ends_with("Additional instructions:\nName the setting."));
+    }
+
+    #[test]
     fn empty_custom_instructions_are_ignored() {
         let request = TranslationRequest::new(["hello"], Language::English).with_instructions("  ");
         assert!(!translation_system_prompt(&request).contains("Additional instructions"));

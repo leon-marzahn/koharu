@@ -437,6 +437,20 @@
       "title": "Görünüm"
     },
     "backToEditor": "Düzenleyiciye dön",
+    "description": {
+      "title": "Açıklama",
+      "description": "Çeviriden önce her sayfayı bir görsel modelle açıklar, böylece çevirmen sahneyi bilir.",
+      "model": "Model",
+      "modelDescription": "Sağlayıcı etiketleri her modelin nerede çalıştığını gösterir; bağlantılar ayrıca yapılandırılır.",
+      "descriptionModel": "Açıklama modeli",
+      "descriptionModelDescription": "Her sayfayı açıklayan görsel modeli seçin.",
+      "noModel": "Açıklama modeli yok",
+      "clear": "Açıklama yapma",
+      "outputDescription": "Açıklama, Çeviri sayfasındaki hedef dilde yazılır.",
+      "instructionsDescription": "Açıklama için ek yönergeler, örneğin nelere odaklanılacağı.",
+      "instructionsLabel": "Açıklama yönergeleri",
+      "instructionsPlaceholder": "Sayfaları açıklamak için isteğe bağlı yönergeler"
+    },
     "generation": {
       "description": "Dil modellerinin çevrilmiş metni nasıl ürettiğini ayarlayın.",
       "enableReasoning": "Akıl yürütmeyi etkinleştir",
@@ -508,6 +522,7 @@
     },
     "tabs": {
       "appearance": "Görünüm",
+      "description": "Açıklama",
       "pipeline": "İşlem hattı",
       "providers": "Sağlayıcılar",
       "shortcuts": "Kısayollar",

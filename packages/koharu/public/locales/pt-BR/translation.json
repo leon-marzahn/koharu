@@ -437,6 +437,20 @@
       "title": "Aparência"
     },
     "backToEditor": "Voltar ao editor",
+    "description": {
+      "title": "Descrição",
+      "description": "Descreve cada página com um modelo de visão antes de traduzir, para que o tradutor conheça a cena.",
+      "model": "Modelo",
+      "modelDescription": "Os rótulos do provedor indicam onde cada modelo é executado; as conexões são configuradas separadamente.",
+      "descriptionModel": "Modelo de descrição",
+      "descriptionModelDescription": "Escolha o modelo de visão que descreve cada página.",
+      "noModel": "Sem modelo de descrição",
+      "clear": "Não descrever",
+      "outputDescription": "A descrição é escrita no idioma de destino da página Tradução.",
+      "instructionsDescription": "Orientações extras para a descrição, como no que se concentrar.",
+      "instructionsLabel": "Instruções de descrição",
+      "instructionsPlaceholder": "Orientações opcionais para descrever páginas"
+    },
     "generation": {
       "description": "Ajuste como os modelos de linguagem geram o texto traduzido.",
       "enableReasoning": "Ativar raciocínio",
@@ -508,6 +522,7 @@
     },
     "tabs": {
       "appearance": "Aparência",
+      "description": "Descrição",
       "pipeline": "Pipeline",
       "providers": "Provedores",
       "shortcuts": "Atalhos",

@@ -9,9 +9,8 @@ use koharu_scene::{
     TermList, TermUpdate, Translation,
 };
 use koharu_translator::{
-    GenerationConfig, Translated, TranslationCharacter, TranslationCharacterUpdate,
-    TranslationContext, TranslationProposals, TranslationRequest, TranslationTerm,
-    TranslationTermUpdate, Translator,
+    Translated, TranslationCharacter, TranslationCharacterUpdate, TranslationContext,
+    TranslationProposals, TranslationRequest, TranslationTerm, TranslationTermUpdate, Translator,
 };
 
 use crate::TranslationConfig;
@@ -325,16 +324,6 @@ fn merge_proposals(scene: &Snapshot, mut new: TranslationProposals) -> Result<Op
 /// The page for the description: the source with its Cleanup layers overlaid (the same overlay
 /// inpainting uses), so dialogue does not get summarised. No renderer: it would also draw text and
 /// paint layers. Falls back to the plain source when there is no cleanup layer.
-/// The description model is not the translation model: it must not inherit the translation
-/// settings (Settings, Generation), above all reasoning. `None` sends no `reasoning_effort`, so
-/// the provider's own setting (for example LM Studio's thinking toggle) decides.
-fn description_generation() -> GenerationConfig {
-    GenerationConfig {
-        reasoning: None,
-        ..GenerationConfig::default()
-    }
-}
-
 async fn clean_page(input: &StageInput) -> Result<Option<Arc<DynamicImage>>> {
     let Some(source) = input.images.get(&input.scene, input.page, "source").await? else {
         return Ok(None);
@@ -380,9 +369,12 @@ impl Processor {
         let Some(image) = clean_page(input).await? else {
             return Ok(None);
         };
-        let request = TranslationRequest::describing(self.config.target_language)
+        let mut request = TranslationRequest::describing(self.config.target_language)
             .with_characters(characters.to_vec())
             .with_image(image);
+        if let Some(instructions) = self.config.description_instructions.as_deref() {
+            request = request.with_instructions(instructions);
+        }
         let report = |active: bool, model: &str| {
             crate::progress::emit(
                 input.progress.as_ref(),
@@ -396,7 +388,7 @@ impl Processor {
         report(true, model.provider.name());
         let described = self
             .translator
-            .describe(model, description_generation(), request)
+            .describe(model, self.config.description_generation(), request)
             .await;
         report(false, Translator::model(&self.config.model));
         described.map(Some)
@@ -661,11 +653,6 @@ fn write_translations(
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn description_ignores_the_translation_reasoning_setting() {
-        assert_eq!(super::description_generation().reasoning, None);
-    }
-
     use image::{Rgba, RgbaImage};
     use koharu_scene::{At, Authored, PageDraft, Session, TextLayout, TextLayoutKind, Translation};
 

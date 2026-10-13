@@ -437,6 +437,20 @@
       "title": "外观"
     },
     "backToEditor": "返回编辑器",
+    "description": {
+      "title": "描述",
+      "description": "翻译前先用视觉模型描述每一页，让翻译模型了解场景。",
+      "model": "模型",
+      "modelDescription": "提供商标签表示各模型的运行位置；连接需单独配置。",
+      "descriptionModel": "描述模型",
+      "descriptionModelDescription": "选择用于描述每一页的视觉模型。",
+      "noModel": "无描述模型",
+      "clear": "不描述",
+      "outputDescription": "描述使用“翻译”页面中的目标语言撰写。",
+      "instructionsDescription": "对描述的额外指引，例如需要关注的内容。",
+      "instructionsLabel": "描述指令",
+      "instructionsPlaceholder": "可选的页面描述指引"
+    },
     "generation": {
       "description": "微调语言模型生成译文的方式。",
       "enableReasoning": "启用推理",
@@ -508,6 +522,7 @@
     },
     "tabs": {
       "appearance": "外观",
+      "description": "描述",
       "pipeline": "流水线",
       "providers": "提供商",
       "shortcuts": "快捷键",

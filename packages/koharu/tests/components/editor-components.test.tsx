@@ -2388,6 +2388,63 @@ describe('greenfield editor', () => {
     expect(content?.closest('[data-slot="scroll-area-viewport"]')).toHaveClass('h-auto', 'max-h-64')
   })
 
+  it('edits and saves the description settings through the settings page', async () => {
+    installProject()
+    const user = userEvent.setup()
+    withDescriptionModel()
+    useKoharuStore.setState({ settingsOpen: true })
+    const save = vi
+      .spyOn(commands, 'savePreferences')
+      .mockImplementation(async (pipeline) => ({ ...preferences, pipeline }))
+    render(
+      <ThemeProvider attribute='class'>
+        <SettingsPage />
+      </ThemeProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Description' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Description' })).toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Enable reasoning' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Target language' })).not.toBeInTheDocument()
+    // The describe call always sends the page image, so a Vision switch would do nothing here.
+    expect(screen.queryByRole('switch', { name: 'Vision' })).not.toBeInTheDocument()
+
+    save.mockClear()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Description instructions' }), {
+      target: { value: 'Name the setting.' },
+    })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Temperature' }), {
+      target: { value: '0.3' },
+    })
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            description_instructions: 'Name the setting.',
+            description_generation: expect.objectContaining({ temperature: 0.3 }),
+            instructions: null,
+            generation: { vision: true, reasoning: false },
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+
+    save.mockClear()
+    await user.click(screen.getByRole('button', { name: "Don't describe" }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({ description_model: null }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+    expect(screen.getByText('No description model')).toBeInTheDocument()
+  })
+
   it('edits and persists pipeline and translation preferences from the settings page', async () => {
     installProject()
     const user = userEvent.setup()

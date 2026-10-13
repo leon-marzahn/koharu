@@ -437,6 +437,20 @@
       "title": "外觀"
     },
     "backToEditor": "返回編輯器",
+    "description": {
+      "title": "描述",
+      "description": "翻譯前先用視覺模型描述每一頁，讓翻譯模型了解場景。",
+      "model": "模型",
+      "modelDescription": "供應商標籤表示各模型的執行位置；連線需另行設定。",
+      "descriptionModel": "描述模型",
+      "descriptionModelDescription": "選擇用於描述每一頁的視覺模型。",
+      "noModel": "無描述模型",
+      "clear": "不描述",
+      "outputDescription": "描述使用「翻譯」頁面中的目標語言撰寫。",
+      "instructionsDescription": "對描述的額外指引，例如需要關注的內容。",
+      "instructionsLabel": "描述指令",
+      "instructionsPlaceholder": "可選的頁面描述指引"
+    },
     "generation": {
       "description": "微調語言模型產生譯文的方式。",
       "enableReasoning": "啟用推理",
@@ -508,6 +522,7 @@
     },
     "tabs": {
       "appearance": "外觀",
+      "description": "描述",
       "pipeline": "流程",
       "providers": "提供者",
       "shortcuts": "快捷鍵",

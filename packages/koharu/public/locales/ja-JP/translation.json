@@ -437,6 +437,20 @@
       "title": "外観"
     },
     "backToEditor": "エディターに戻る",
+    "description": {
+      "title": "説明",
+      "description": "翻訳の前にビジョンモデルで各ページを説明し、翻訳モデルが場面を把握できるようにします。",
+      "model": "モデル",
+      "modelDescription": "プロバイダーのラベルは各モデルの実行場所を示します。接続は別に設定します。",
+      "descriptionModel": "説明モデル",
+      "descriptionModelDescription": "各ページを説明するビジョンモデルを選択します。",
+      "noModel": "説明モデルなし",
+      "clear": "説明しない",
+      "outputDescription": "説明は「翻訳」ページの翻訳先言語で書かれます。",
+      "instructionsDescription": "説明への追加の指示（注目する点など）。",
+      "instructionsLabel": "説明の指示",
+      "instructionsPlaceholder": "ページの説明に関する任意の指示"
+    },
     "generation": {
       "description": "言語モデルによる翻訳文の生成方法を調整します。",
       "enableReasoning": "推論を有効化",
@@ -508,6 +522,7 @@
     },
     "tabs": {
       "appearance": "外観",
+      "description": "説明",
       "pipeline": "パイプライン",
       "providers": "プロバイダー",
       "shortcuts": "ショートカット",

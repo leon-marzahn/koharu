@@ -119,6 +119,8 @@ impl Arguments {
                 previous_pages: 2,
                 favourite_models: Vec::new(),
                 description_model: None,
+                description_generation: None,
+                description_instructions: None,
             },
             inpainting: match self.inpainting {
                 InpaintingChoice::LaMa => InpaintingModel::LaMa {},

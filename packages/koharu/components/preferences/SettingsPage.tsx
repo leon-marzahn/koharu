@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   Cpu,
+  Image as ImageIcon,
   KeyRound,
   Keyboard,
   Languages,
@@ -16,6 +17,7 @@ import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { DescriptionPreferences } from '@/components/preferences/DescriptionPreferences'
 import { PipelinePreferences } from '@/components/preferences/PipelinePreferences'
 import {
   PreferencePage,
@@ -50,6 +52,7 @@ const tabs = [
   ['pipeline', Cpu],
   ['providers', KeyRound],
   ['translation', Languages],
+  ['description', ImageIcon],
   ['typesetting', Type],
   ['shortcuts', Keyboard],
 ] as const
@@ -217,6 +220,19 @@ export function SettingsPage() {
                   modelChoices={translationModels}
                   providers={providers?.entries ?? []}
                   languages={preferences?.languages ?? []}
+                  onChange={(translation) =>
+                    setPipeline((current) => (current ? { ...current, translation } : current))
+                  }
+                />
+              ) : (
+                <LoadingPreferences />
+              ))}
+            {tab === 'description' &&
+              (translation ? (
+                <DescriptionPreferences
+                  value={translation}
+                  modelChoices={translationModels}
+                  providers={providers?.entries ?? []}
                   onChange={(translation) =>
                     setPipeline((current) => (current ? { ...current, translation } : current))
                   }

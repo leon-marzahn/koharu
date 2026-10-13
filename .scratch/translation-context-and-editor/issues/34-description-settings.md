@@ -14,10 +14,10 @@ Out of scope: previous pages for the description (ticket 35); a reasoning contro
 
 **Blocked by:** 33 Description activity (merged)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Settings has a Description page with Model, Generation (without reasoning) and Instructions; no language control
-- [ ] The description call uses `description_generation` and `description_instructions`, never the translation ones; no `reasoning_effort` is sent
-- [ ] "Don't describe" clears the model; the editor dropdown row still works and edits the same field
-- [ ] Config without the new fields loads; Rust tests for the prompt carrying the instructions and for the config default
-- [ ] Component test for the page (edits reach `onChange`, model clear, no reasoning switch); nine locales
+- [x] Settings has a Description page with Model, Generation (without reasoning) and Instructions; no language control
+- [x] The description call uses `description_generation` and `description_instructions`, never the translation ones; no `reasoning_effort` is sent
+- [x] "Don't describe" clears the model; the editor dropdown row still works and edits the same field
+- [x] Config without the new fields loads; Rust tests for the prompt carrying the instructions and for the config default
+- [x] Component test for the page (edits reach `onChange`, model clear, no reasoning switch); nine locales

@@ -190,6 +190,28 @@ pub struct TranslationConfig {
     /// description stage off; defaulted on load so older configs keep working.
     #[serde(default)]
     pub description_model: Option<koharu_translator::ModelSelection>,
+    /// Generation settings for the description call only; read through `description_generation()`.
+    /// Unset means `reasoning: None`, so no `reasoning_effort` is sent and the provider's own
+    /// setting (e.g. LM Studio's thinking toggle) decides; Settings offers no reasoning control.
+    /// `Option` rather than a defaulted struct: an optional nested object breaks the generated
+    /// bridge transform in `protocol.ts`.
+    #[serde(default)]
+    pub description_generation: Option<GenerationConfig>,
+    /// Appended to the describe system prompt. The translation `instructions` are never sent.
+    #[serde(default)]
+    pub description_instructions: Option<String>,
+}
+
+impl TranslationConfig {
+    /// The generation settings for the description call. Unset means the defaults with
+    /// `reasoning: None`, never the translation's.
+    pub fn description_generation(&self) -> GenerationConfig {
+        self.description_generation
+            .unwrap_or_else(|| GenerationConfig {
+                reasoning: None,
+                ..GenerationConfig::default()
+            })
+    }
 }
 
 const fn default_previous_pages() -> u32 {
@@ -206,6 +228,8 @@ impl Default for TranslationConfig {
             previous_pages: default_previous_pages(),
             favourite_models: Vec::new(),
             description_model: None,
+            description_generation: None,
+            description_instructions: None,
         }
     }
 }
@@ -335,6 +359,19 @@ mod tests {
 
         let config: PipelineConfig = toml::from_str(&old).unwrap();
         assert_eq!(config.translation.previous_pages, 2);
+    }
+
+    #[test]
+    fn configs_saved_before_description_settings_existed_still_load() {
+        let saved = toml::to_string(&PipelineConfig::default()).unwrap();
+        let mut value: toml::Table = toml::from_str(&saved).unwrap();
+        let translation = value["translation"].as_table_mut().unwrap();
+        translation.remove("description_generation");
+        translation.remove("description_instructions");
+
+        let config: PipelineConfig = value.try_into().unwrap();
+        assert_eq!(config.translation.description_generation().reasoning, None);
+        assert_eq!(config.translation.description_instructions, None);
     }
 
     #[test]
