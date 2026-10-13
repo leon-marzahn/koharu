@@ -42,6 +42,7 @@ pub(crate) fn translations(
     text: &str,
     source_segments: &[String],
 ) -> anyhow::Result<Translated> {
+    let text = unfence(text);
     // A request without segments is a description request: there is nothing to translate.
     if source_segments.is_empty() {
         return description(provider, text);
@@ -516,6 +517,19 @@ struct TranslationInputSegment<'a> {
     text: &'a str,
 }
 
+/// Models wrap the object in a Markdown code fence (` ```json ... ``` `). Strip exactly one fence
+/// that spans the whole reply; prose around the JSON stays rejected.
+fn unfence(text: &str) -> &str {
+    text.trim()
+        .strip_prefix("```")
+        .and_then(|rest| rest.strip_suffix("```"))
+        .map_or(text, |inner| {
+            inner
+                .trim_start_matches(|c: char| c.is_ascii_alphanumeric())
+                .trim()
+        })
+}
+
 /// Strict parse first. Models sometimes emit a stray bracket after a valid `translations`
 /// array, so on failure salvage each top-level field on its own: the translations must
 /// survive, and proposals are a bonus that may be lost.
@@ -623,10 +637,34 @@ mod tests {
     }
 
     #[test]
+    fn accepts_one_code_fence_around_the_object() {
+        let source = ["one".to_owned()];
+        let object = r#"{"translations":[{"id":0,"text":"hello"}]}"#;
+        for response in [
+            format!("```json\n{object}\n```"),
+            format!("```\n{object}\n```"),
+            format!("  ```JSON\n{object}```\n"),
+        ] {
+            assert_eq!(
+                translations("test", &response, &source).unwrap().segments,
+                ["hello"],
+                "{response}"
+            );
+        }
+        let described = translations(
+            "test",
+            "```json\n{\"description\":\"Two friends.\",\"characters\":[]}\n```",
+            &[],
+        )
+        .unwrap();
+        assert_eq!(described.description.as_deref(), Some("Two friends."));
+    }
+
+    #[test]
     fn rejects_wrapped_and_malformed_json() {
         let source = ["one".to_owned(), "two".to_owned()];
         for response in [
-            "```json\n{\"translations\":[{\"id\":0,\"text\":\"hello\"},{\"id\":1,\"text\":\"world\"}]}\n```",
+            "Here it is:\n```json\n{\"translations\":[{\"id\":0,\"text\":\"hello\"},{\"id\":1,\"text\":\"world\"}]}\n```",
             r#"{translations: [{id: 0, text: 'hello'}, {id: 1, text: 'world'},],}"#,
             r#"Here is the result: {"translations": [{"id": 0, "text": "hello"}, {"id": 1, "text": "world"},]}"#,
             "{\"translations\":[{\"id\":0,\"text\":\"hello\"},{\"id\":1,\"text\":\"world\"",
