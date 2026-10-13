@@ -105,12 +105,13 @@ export const commands = {
 	commitInpaint: (expectedRevision: Revision, points: Point[], diameter: number) => __TAURI_INVOKE<string | null>("commit_inpaint", { expectedRevision, points: points.map(i=>i), diameter }),
 	/**
 	 *  Paint mask: stores the displayed mask as the region's own mask (one undo step) and repaints
-	 *  it. The displayed mask is the stored one plus `strokes`, or `strokes` alone with `replace`
-	 *  (the user cleared first). The region's padded box is reset to the original pixels before
-	 *  inpainting so a smaller mask un-cleans what the old one covered. Strokes are clipped here,
-	 *  to that box, whatever the client sent.
+	 *  it. The displayed mask is the stored one with `strokes` applied in order, or a blank one
+	 *  with `replace` (the user cleared first). A mask left with no masked pixel is removed rather
+	 *  than stored as an all-black mask that would inpaint nothing. The region's padded box is
+	 *  reset to the original pixels before inpainting so a smaller mask un-cleans what the old one
+	 *  covered. Strokes are clipped here, to that box, whatever the client sent.
 	 */
-	paintRegionMask: (region: EntityId, strokes: Point[][], diameter: number, replace: boolean) => __TAURI_INVOKE<string | null>("paint_region_mask", { region, strokes: strokes.map(i=>i.map(i=>i)), diameter, replace }),
+	paintRegionMask: (region: EntityId, strokes: MaskStroke[], replace: boolean) => __TAURI_INVOKE<string | null>("paint_region_mask", { region, strokes: strokes.map(i=>({...i,points:i.points.map(i=>i)})), replace }),
 	/**  The region's stored paint mask as a page-sized PNG; empty bytes when it was never painted. */
 	getPaintedMask: (region: EntityId) => __TAURI_INVOKE<CanvasBytes>("get_painted_mask", { region }),
 };
@@ -373,6 +374,16 @@ export type LmStudioConfig = {
 export type LocalConfig = Record<string, never>;
 
 export type LoginEvent = { type: "progress"; message: string } | { type: "device_code"; verification_url: string; user_code: string };
+
+/**
+ *  One press-to-release polyline of Paint mask. It carries its own diameter, so changing the
+ *  brush size later never resizes strokes already drawn; `erase` removes mask instead of adding.
+ */
+export type MaskStroke = {
+	points: Point[],
+	diameter: number,
+	erase: boolean,
+};
 
 export type MiniMaxConfig = Record<string, never>;
 

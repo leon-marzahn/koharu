@@ -1,6 +1,6 @@
 'use client'
 
-import { Brush, Check, Eraser, ScanText, Trash2, Undo2, X } from 'lucide-react'
+import { Brush, BrushCleaning, Check, Eraser, ScanText, Trash2, Undo2, X } from 'lucide-react'
 import {
   useEffect,
   useRef,
@@ -20,8 +20,19 @@ import {
   type AnalysisRegion,
   type EntityId,
   type Frame,
+  type MaskStroke,
   type Point,
 } from '@koharu/bridge/protocol'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@koharu/ui/components/alert-dialog'
 import { Button } from '@koharu/ui/components/button'
 
 // Detection regions are edited as their axis-aligned bounds (angle 0 until rotated).
@@ -82,11 +93,15 @@ export function RegionsOverlay({
   // Paint mask mode lives only in this overlay (no canvas edit is started), so cancelling
   // or leaving it cannot strand an active edit.
   // `strokes` are only the new ones; `cleared` drops the stored mask so Apply replaces it.
+  // `erase` is the brush/eraser toggle: it applies to strokes started from now on and starts
+  // off every time Paint mode opens.
   const [painting, setPainting] = useState<{
     pointer: number | null
-    strokes: Point[][]
+    strokes: MaskStroke[]
     cleared: boolean
+    erase: boolean
   } | null>(null)
+  const [confirmingClear, setConfirmingClear] = useState(false)
   const [storedMask, setStoredMask] = useState<ImageBitmap | null>(null)
   const paintFrame = region && painting ? regionFrame(region) : null
   // Fetched only in Paint mode; re-entering Paint mode after Apply refetches it.
@@ -139,14 +154,17 @@ export function RegionsOverlay({
     context.strokeStyle = color
     context.lineCap = 'round'
     context.lineJoin = 'round'
-    context.lineWidth = brush.diameter
-    for (const stroke of painting.strokes) {
+    // In order on one canvas: erase strokes cut the stored mask and earlier strokes alike.
+    for (const { points, diameter, erase } of painting.strokes) {
+      context.globalCompositeOperation = erase ? 'destination-out' : 'source-over'
+      context.lineWidth = diameter
       context.beginPath()
       // A lone point repeats so the round cap still draws a dot.
-      for (const p of stroke.length === 1 ? [stroke[0], stroke[0]] : stroke)
+      for (const p of points.length === 1 ? [points[0], points[0]] : points)
         context.lineTo(p.x - paintFrame.x, p.y - paintFrame.y)
       context.stroke()
     }
+    context.globalCompositeOperation = 'source-over'
   })
   // ponytail: the backend clips again, so this clamp only keeps the preview honest.
   const clamp = (p: Point, f: Frame): Point => ({
@@ -158,7 +176,7 @@ export function RegionsOverlay({
     if (!region || !painting?.strokes.length) return
     const { strokes, cleared } = painting
     setPainting(null)
-    void call(commands.paintRegionMask, region.id, strokes, brush.diameter, cleared)
+    void call(commands.paintRegionMask, region.id, strokes, cleared)
       .then(() => refresh(projectKey, pagesKey, pageKey))
       .catch(() => undefined)
   }
@@ -194,7 +212,11 @@ export function RegionsOverlay({
     if (!selected) return
     const onKey = (event: KeyboardEvent) => {
       // Escape cancels paint mode first; only a second press deselects.
-      if (event.key === 'Escape') return painted ? setPainting(null) : setSelected(null)
+      // The confirmation dialog owns Escape while it is open.
+      if (event.key === 'Escape') {
+        if (confirmingClear) return
+        return painted ? setPainting(null) : setSelected(null)
+      }
       const target = event.target
       if (
         target instanceof HTMLInputElement ||
@@ -211,7 +233,7 @@ export function RegionsOverlay({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, painted, present])
+  }, [selected, painted, present, confirmingClear])
 
   // Draw a user region, then OCR, translate and clean only that region.
   const finishSketch = (from: Point, to: Point) => {
@@ -336,15 +358,32 @@ export function RegionsOverlay({
               </Button>
               <Button
                 type='button'
+                variant={painting.erase ? 'default' : 'secondary'}
+                size='icon'
+                aria-label={t('tools.eraseFromMask')}
+                aria-pressed={painting.erase}
+                className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setPainting({ ...painting, erase: !painting.erase })}
+              >
+                <Eraser className='size-3.5' />
+              </Button>
+              <Button
+                type='button'
                 variant='secondary'
                 size='icon'
-                aria-label={t('tools.clearMask')}
+                aria-label={t('tools.clearAllMask')}
                 disabled={painting.cleared && !painting.strokes.length}
                 className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
                 onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => setPainting({ ...painting, strokes: [], cleared: true })}
+                onClick={() => {
+                  // Only a stored mask or unapplied strokes can be lost.
+                  if (storedMask && !painting.cleared) return setConfirmingClear(true)
+                  if (painting.strokes.length) return setConfirmingClear(true)
+                  setPainting({ ...painting, strokes: [], cleared: true })
+                }}
               >
-                <Eraser className='size-3.5' />
+                <BrushCleaning className='size-3.5' />
               </Button>
               <Button
                 type='button'
@@ -366,7 +405,9 @@ export function RegionsOverlay({
               aria-label={t('tools.paintMask')}
               className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => setPainting({ pointer: null, strokes: [], cleared: false })}
+              onClick={() =>
+                setPainting({ pointer: null, strokes: [], cleared: false, erase: false })
+              }
             >
               <Brush className='size-3.5' />
             </Button>
@@ -399,14 +440,25 @@ export function RegionsOverlay({
             setPainting({
               ...painting,
               pointer: event.pointerId,
-              strokes: [...painting.strokes, [clamp(at, paintFrame)]],
+              strokes: [
+                ...painting.strokes,
+                {
+                  points: [clamp(at, paintFrame)],
+                  diameter: brush.diameter,
+                  erase: painting.erase,
+                },
+              ],
             })
           }}
           onPointerMove={(event) => {
             const at = point(event)
             if (painting.pointer !== event.pointerId || !at) return
             const strokes = painting.strokes.slice()
-            strokes[strokes.length - 1] = [...strokes[strokes.length - 1], clamp(at, paintFrame)]
+            const last = strokes[strokes.length - 1]
+            strokes[strokes.length - 1] = {
+              ...last,
+              points: [...last.points, clamp(at, paintFrame)],
+            }
             setPainting({ ...painting, strokes })
           }}
           onPointerUp={(event) => {
@@ -423,6 +475,24 @@ export function RegionsOverlay({
           />
         </div>
       )}
+      <AlertDialog open={confirmingClear} onOpenChange={setConfirmingClear}>
+        <AlertDialogContent onPointerDown={(event) => event.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('tools.clearAllMask')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('tools.clearAllMaskDescription')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                setPainting((current) => current && { ...current, strokes: [], cleared: true })
+              }
+            >
+              {t('tools.clearAllMask')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {drawing && (
         <div
           data-testid='region-draw-surface'

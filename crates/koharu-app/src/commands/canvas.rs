@@ -26,6 +26,15 @@ pub struct Point {
     pub y: f64,
 }
 
+/// One press-to-release polyline of Paint mask. It carries its own diameter, so changing the
+/// brush size later never resizes strokes already drawn; `erase` removes mask instead of adding.
+#[derive(Clone, Debug, Deserialize, Type)]
+pub struct MaskStroke {
+    pub points: Vec<Point>,
+    pub diameter: f32,
+    pub erase: bool,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Type)]
 pub struct PaintBrush {
     pub diameter: f32,
@@ -383,8 +392,13 @@ pub(crate) async fn commit_inpaint(
             page_value.height.round() as u32,
         )
     };
-    let (png, bounds) =
-        tokio_rayon::spawn(move || encode_mask(width, height, &[points], diameter, None)).await?;
+    let stroke = MaskStroke {
+        points,
+        diameter,
+        erase: false,
+    };
+    let (png, bounds, _) =
+        tokio_rayon::spawn(move || encode_mask(width, height, None, &[stroke], None)).await?;
     Ok(Some(
         run_manual_inpaint(&handle, page, png, bounds, None).await?,
     ))
@@ -436,36 +450,27 @@ pub(crate) async fn get_painted_mask(
 }
 
 /// Paint mask: stores the displayed mask as the region's own mask (one undo step) and repaints
-/// it. The displayed mask is the stored one plus `strokes`, or `strokes` alone with `replace`
-/// (the user cleared first). The region's padded box is reset to the original pixels before
-/// inpainting so a smaller mask un-cleans what the old one covered. Strokes are clipped here,
-/// to that box, whatever the client sent.
+/// it. The displayed mask is the stored one with `strokes` applied in order, or a blank one
+/// with `replace` (the user cleared first). A mask left with no masked pixel is removed rather
+/// than stored as an all-black mask that would inpaint nothing. The region's padded box is
+/// reset to the original pixels before inpainting so a smaller mask un-cleans what the old one
+/// covered. Strokes are clipped here, to that box, whatever the client sent.
 #[tracing::instrument(
     target = "koharu_metrics",
     name = "region_mask_painted",
     skip_all,
-    fields(origin = "user", stroke_count = strokes.len(), size = f64::from(diameter)),
+    fields(origin = "user", stroke_count = strokes.len()),
 )]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn paint_region_mask(
     region: EntityId,
-    strokes: Vec<Vec<Point>>,
-    diameter: f32,
+    strokes: Vec<MaskStroke>,
     replace: bool,
     handle: AppHandle<CefRuntime>,
     project: State<'_, CurrentProject>,
 ) -> Result<Option<JobId>, Error> {
-    if !diameter.is_finite()
-        || diameter <= 0.0
-        || strokes.iter().all(Vec::is_empty)
-        || strokes
-            .iter()
-            .flatten()
-            .any(|point| !point.x.is_finite() || !point.y.is_finite())
-    {
-        return Err(anyhow!("a mask stroke needs a positive diameter and finite points").into());
-    }
+    validate_strokes(&strokes)?;
     let (page, width, height, clip, stored) = {
         let project = project.project.lock().await;
         let project = project.as_ref().context("no project is open")?;
@@ -494,48 +499,29 @@ pub(crate) async fn paint_region_mask(
             stored,
         )
     };
-    let Ok((png, _)) =
-        tokio_rayon::spawn(move || encode_mask(width, height, &strokes, diameter, Some(clip)))
-            .await
+    let Ok((png, _, empty)) = tokio_rayon::spawn(move || {
+        encode_mask(width, height, stored.as_deref(), &strokes, Some(clip))
+    })
+    .await
     else {
-        return Ok(None); // the stroke fell entirely outside the region: nothing to store
-    };
-    let png = match stored {
-        Some(stored) => tokio_rayon::spawn(move || union_masks(&stored, &png)).await?,
-        None => png,
+        return Ok(None); // the strokes changed nothing: nothing to store
     };
     let bounds = clip;
     {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project
-            .set_painted_mask(region, png.clone(), width, height)
-            .await?;
+        let commit = if empty {
+            project.clear_painted_mask(region).await?
+        } else {
+            project
+                .set_painted_mask(region, png.clone(), width, height)
+                .await?
+        };
         project.record_commit(&commit);
     }
     Ok(Some(
         run_manual_inpaint(&handle, page, png, bounds, Some(clip)).await?,
     ))
-}
-
-/// Per-pixel maximum of two same-sized PNG masks.
-fn union_masks(a: &[u8], b: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let mut a = image::load_from_memory(a)?.to_luma8();
-    let b = image::load_from_memory(b)?.to_luma8();
-    if a.dimensions() != b.dimensions() {
-        bail!("stored mask does not match the page size");
-    }
-    for (pixel, other) in a.pixels_mut().zip(b.pixels()) {
-        pixel.0[0] = pixel.0[0].max(other.0[0]);
-    }
-    let mut png = Vec::new();
-    PngEncoder::new(&mut png).write_image(
-        a.as_raw(),
-        a.width(),
-        a.height(),
-        image::ExtendedColorType::L8,
-    )?;
-    Ok(png)
 }
 
 /// OCR + translate one region, then (optionally) clean it. Entity scope keeps neighbours
@@ -637,22 +623,133 @@ fn rect_mask(
 
 #[cfg(test)]
 mod region_mask_tests {
-    use super::{Point, encode_mask, rect_mask, union_masks};
+    use super::{MaskStroke, Point, encode_mask, rect_mask, validate_strokes};
 
     #[test]
-    fn union_keeps_both_masks() {
-        let a = encode_mask(20, 20, &[vec![Point { x: 3.5, y: 3.5 }]], 2.0, None)
+    fn each_stroke_is_validated_on_its_own() {
+        let good = || MaskStroke {
+            points: vec![Point { x: 1.0, y: 1.0 }],
+            diameter: 2.0,
+            erase: false,
+        };
+        assert!(validate_strokes(&[good()]).is_ok());
+        for diameter in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert!(validate_strokes(&[good(), MaskStroke { diameter, ..good() }]).is_err());
+        }
+        let mut bad_point = good();
+        bad_point.points.push(Point {
+            x: f64::NAN,
+            y: 0.0,
+        });
+        assert!(validate_strokes(&[good(), bad_point]).is_err());
+        assert!(
+            validate_strokes(&[MaskStroke {
+                points: vec![],
+                ..good()
+            }])
+            .is_err()
+        );
+    }
+
+    fn stroke(points: &[(f64, f64)], diameter: f32, erase: bool) -> MaskStroke {
+        MaskStroke {
+            points: points.iter().map(|&(x, y)| Point { x, y }).collect(),
+            diameter,
+            erase,
+        }
+    }
+
+    fn add(points: &[(f64, f64)], diameter: f32) -> MaskStroke {
+        stroke(points, diameter, false)
+    }
+
+    fn erase(points: &[(f64, f64)], diameter: f32) -> MaskStroke {
+        stroke(points, diameter, true)
+    }
+
+    fn pixels(png: &[u8]) -> image::GrayImage {
+        image::load_from_memory(png).unwrap().to_luma8()
+    }
+
+    #[test]
+    fn a_stored_mask_keeps_its_pixels_under_new_strokes() {
+        let a = encode_mask(20, 20, None, &[add(&[(3.5, 3.5)], 2.0)], None)
             .unwrap()
             .0;
-        let b = encode_mask(20, 20, &[vec![Point { x: 15.5, y: 15.5 }]], 2.0, None)
+        let b = encode_mask(20, 20, Some(&a), &[add(&[(15.5, 15.5)], 2.0)], None)
             .unwrap()
             .0;
-        let mask = image::load_from_memory(&union_masks(&a, &b).unwrap())
-            .unwrap()
-            .to_luma8();
+        let mask = pixels(&b);
         assert_eq!(mask.get_pixel(3, 3).0[0], 255);
         assert_eq!(mask.get_pixel(15, 15).0[0], 255);
         assert_eq!(mask.get_pixel(9, 9).0[0], 0);
+    }
+
+    #[test]
+    fn an_erase_stroke_removes_only_the_pixels_it_covers() {
+        let line = add(&[(2.5, 10.5), (37.5, 10.5)], 4.0);
+        let (png, ..) = encode_mask(40, 20, None, &[line], None).unwrap();
+        let (png, _, empty) =
+            encode_mask(40, 20, Some(&png), &[erase(&[(20.5, 10.5)], 6.0)], None).unwrap();
+        let mask = pixels(&png);
+        assert!(!empty);
+        assert_eq!(mask.get_pixel(20, 10).0[0], 0);
+        assert_eq!(mask.get_pixel(10, 10).0[0], 255);
+        assert_eq!(mask.get_pixel(30, 10).0[0], 255);
+        assert_eq!(mask.get_pixel(20, 5).0[0], 0);
+    }
+
+    #[test]
+    fn strokes_apply_in_order() {
+        let strokes = [
+            add(&[(5.5, 10.5), (35.5, 10.5)], 4.0),
+            erase(&[(20.5, 10.5)], 8.0),
+            add(&[(20.5, 10.5)], 2.0),
+        ];
+        let mask = pixels(&encode_mask(40, 20, None, &strokes, None).unwrap().0);
+        assert_eq!(mask.get_pixel(20, 10).0[0], 255); // painted again after the erase
+        assert_eq!(mask.get_pixel(17, 10).0[0], 0); // still erased
+        assert_eq!(mask.get_pixel(8, 10).0[0], 255);
+    }
+
+    #[test]
+    fn erasing_an_empty_or_missing_mask_changes_nothing() {
+        let erasing = [erase(&[(10.5, 10.5)], 8.0)];
+        assert!(encode_mask(20, 20, None, &erasing, None).is_err());
+        let blank = encode_mask(20, 20, None, &[add(&[(1.5, 1.5)], 2.0)], None)
+            .unwrap()
+            .0;
+        // The erase misses the only painted pixels, so nothing would be stored.
+        assert!(encode_mask(20, 20, Some(&blank), &erasing, None).is_err());
+    }
+
+    #[test]
+    fn each_stroke_uses_its_own_diameter() {
+        let strokes = [add(&[(10.5, 10.5)], 2.0), add(&[(30.5, 10.5)], 10.0)];
+        let mask = pixels(&encode_mask(40, 20, None, &strokes, None).unwrap().0);
+        assert_eq!(mask.get_pixel(10, 10).0[0], 255);
+        assert_eq!(mask.get_pixel(13, 10).0[0], 0);
+        assert_eq!(mask.get_pixel(33, 10).0[0], 255);
+    }
+
+    #[test]
+    fn a_replace_then_erase_works_on_the_new_strokes_only() {
+        // `replace` passes no base, so the erase only sees what the same call painted.
+        let strokes = [
+            add(&[(5.5, 5.5), (25.5, 5.5)], 4.0),
+            erase(&[(15.5, 5.5)], 6.0),
+        ];
+        let mask = pixels(&encode_mask(30, 10, None, &strokes, None).unwrap().0);
+        assert_eq!(mask.get_pixel(5, 5).0[0], 255);
+        assert_eq!(mask.get_pixel(15, 5).0[0], 0);
+    }
+
+    #[test]
+    fn erasing_every_masked_pixel_reports_an_empty_mask() {
+        let (png, ..) = encode_mask(20, 20, None, &[add(&[(10.5, 10.5)], 4.0)], None).unwrap();
+        let (_, _, empty) =
+            encode_mask(20, 20, Some(&png), &[erase(&[(10.5, 10.5)], 30.0)], None).unwrap();
+        assert!(empty);
     }
 
     #[test]
@@ -663,25 +760,25 @@ mod region_mask_tests {
             width: 10.0,
             height: 10.0,
         };
-        let line = [Point { x: 0.0, y: 15.0 }, Point { x: 40.0, y: 15.0 }];
-        let (png, bounds) = encode_mask(50, 50, &[line.to_vec()], 4.0, Some(clip)).unwrap();
-        let mask = image::load_from_memory(&png).unwrap().to_luma8();
+        let line = add(&[(0.0, 15.0), (40.0, 15.0)], 4.0);
+        let (png, bounds, _) = encode_mask(50, 50, None, &[line], Some(clip)).unwrap();
+        let mask = pixels(&png);
         assert_eq!(mask.get_pixel(15, 15).0[0], 255);
         assert_eq!(mask.get_pixel(5, 15).0[0], 0);
         assert_eq!(mask.get_pixel(30, 15).0[0], 0);
         assert!(bounds.x >= 10.0 && bounds.x + bounds.width <= 20.0);
-        let outside = [Point { x: 40.0, y: 40.0 }];
-        assert!(encode_mask(50, 50, &[outside.to_vec()], 4.0, Some(clip)).is_err());
+        let outside = add(&[(40.0, 40.0)], 4.0);
+        assert!(encode_mask(50, 50, None, &[outside], Some(clip)).is_err());
     }
 
     #[test]
     fn separate_strokes_are_not_joined() {
         let strokes = [
-            vec![Point { x: 5.0, y: 5.0 }, Point { x: 5.0, y: 6.0 }],
-            vec![Point { x: 45.0, y: 5.0 }, Point { x: 45.0, y: 6.0 }],
+            add(&[(5.0, 5.0), (5.0, 6.0)], 2.0),
+            add(&[(45.0, 5.0), (45.0, 6.0)], 2.0),
         ];
-        let (png, _) = encode_mask(50, 50, &strokes, 2.0, None).unwrap();
-        let mask = image::load_from_memory(&png).unwrap().to_luma8();
+        let (png, ..) = encode_mask(50, 50, None, &strokes, None).unwrap();
+        let mask = pixels(&png);
         assert_eq!(mask.get_pixel(5, 5).0[0], 255);
         assert_eq!(mask.get_pixel(45, 5).0[0], 255);
         assert_eq!(mask.get_pixel(25, 5).0[0], 0);
@@ -714,17 +811,38 @@ fn ensure_revision(actual: Revision, expected: Revision) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Every stroke needs its own positive finite diameter and finite points.
+fn validate_strokes(strokes: &[MaskStroke]) -> anyhow::Result<()> {
+    if strokes.iter().all(|stroke| stroke.points.is_empty())
+        || strokes.iter().any(|stroke| {
+            !stroke.diameter.is_finite()
+                || stroke.diameter <= 0.0
+                || stroke
+                    .points
+                    .iter()
+                    .any(|point| !point.x.is_finite() || !point.y.is_finite())
+        })
+    {
+        bail!("a mask stroke needs a positive diameter and finite points");
+    }
+    Ok(())
+}
+
+/// Rasterises `strokes` in order onto `base` (a same-sized PNG mask) or a blank mask. Add
+/// strokes raise coverage, erase strokes lower it (like canvas `source-over` and
+/// `destination-out`). Returns the PNG, the box of pixels the strokes changed and whether no
+/// masked pixel remains. Fails when the strokes changed nothing.
 fn encode_mask(
     width: u32,
     height: u32,
-    strokes: &[Vec<Point>],
-    diameter: f32,
+    base: Option<&[u8]>,
+    strokes: &[MaskStroke],
     clip: Option<koharu_pipeline::Bounds>,
-) -> anyhow::Result<(Vec<u8>, koharu_pipeline::Bounds)> {
+) -> anyhow::Result<(Vec<u8>, koharu_pipeline::Bounds, bool)> {
     if width == 0 || height == 0 {
         bail!("page dimensions must be positive");
     }
-    // Pixels outside `clip` stay unpainted; whole page when absent.
+    // Pixels outside `clip` stay untouched; whole page when absent.
     let clip = clip.map_or([0, 0, width, height], |c| {
         [
             c.x as u32,
@@ -733,16 +851,27 @@ fn encode_mask(
             ((c.y + c.height) as u32).min(height),
         ]
     });
-    let mut image = GrayImage::new(width, height);
-    let radius = f64::from(diameter) * 0.5;
+    let mut image = match base {
+        Some(base) => {
+            let image = image::load_from_memory(base)?.to_luma8();
+            if image.dimensions() != (width, height) {
+                bail!("stored mask does not match the page size");
+            }
+            image
+        }
+        None => GrayImage::new(width, height),
+    };
     let mut dirty = None::<[u32; 4]>;
     // Each stroke is its own polyline: lifting the pen never draws a connecting segment.
-    for (start, end) in strokes.iter().flat_map(|points| {
+    for (stroke, (start, end)) in strokes.iter().flat_map(|stroke| {
+        let points = &stroke.points;
         points
             .iter()
             .zip(points.iter().skip(1))
             .chain(points.last().map(|point| (point, point)))
+            .map(move |segment| (stroke, segment))
     }) {
+        let radius = f64::from(stroke.diameter) * 0.5;
         let left = ((start.x.min(end.x) - radius - 0.5).floor().max(0.0) as u32).max(clip[0]);
         let top = ((start.y.min(end.y) - radius - 0.5).floor().max(0.0) as u32).max(clip[1]);
         let right = ((start.x.max(end.x) + radius + 0.5)
@@ -773,7 +902,15 @@ fn encode_mask(
                     continue;
                 }
                 let pixel = image.get_pixel_mut(x, y);
-                pixel.0[0] = pixel.0[0].max(coverage);
+                let before = pixel.0[0];
+                pixel.0[0] = if stroke.erase {
+                    before.min(255 - coverage)
+                } else {
+                    before.max(coverage)
+                };
+                if pixel.0[0] == before {
+                    continue;
+                }
                 dirty = Some(match dirty {
                     Some([min_x, min_y, max_x, max_y]) => {
                         [min_x.min(x), min_y.min(y), max_x.max(x), max_y.max(y)]
@@ -783,7 +920,8 @@ fn encode_mask(
             }
         }
     }
-    let [left, top, right, bottom] = dirty.context("inpaint stroke does not intersect the page")?;
+    let [left, top, right, bottom] = dirty.context("the strokes change no pixel of the mask")?;
+    let empty = image.as_raw().iter().all(|&value| value == 0);
     let mut png = Vec::new();
     PngEncoder::new(&mut png).write_image(
         image.as_raw(),
@@ -799,5 +937,6 @@ fn encode_mask(
             width: f64::from(right - left + 1),
             height: f64::from(bottom - top + 1),
         },
+        empty,
     ))
 }

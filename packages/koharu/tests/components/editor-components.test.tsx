@@ -1533,12 +1533,12 @@ describe('greenfield editor', () => {
         fireEvent.pointerUp(surface, { pointerId: 1, clientX: 200, clientY: -50 })
         await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
         expect(paint).toHaveBeenCalledTimes(1)
-        const [region, strokes, , replace] = paint.mock.calls[0]
+        const [region, strokes, replace] = paint.mock.calls[0]
         expect(region).toBe('region-1')
         expect(replace).toBe(false)
         expect(strokes).toHaveLength(1)
-        expect(strokes[0].length).toBeGreaterThan(1)
-        for (const p of strokes[0]) {
+        expect(strokes[0].points.length).toBeGreaterThan(1)
+        for (const p of strokes[0].points) {
           expect(p.x).toBeGreaterThanOrEqual(8)
           expect(p.x).toBeLessThanOrEqual(62)
           expect(p.y).toBeGreaterThanOrEqual(8)
@@ -1562,15 +1562,93 @@ describe('greenfield editor', () => {
         await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
         const strokes = paint.mock.calls[0][1]
         expect(strokes).toHaveLength(1)
-        expect(strokes[0][0]).toEqual({ x: 20, y: 20 })
+        expect(strokes[0].points[0]).toEqual({ x: 20, y: 20 })
       })
 
-      it('Clear makes Apply replace the stored mask', async () => {
+      it('Clear all with nothing to lose skips the confirmation and makes Apply replace', async () => {
         const { user, paint, surface } = await start()
-        await user.click(screen.getByRole('button', { name: 'Clear mask', hidden: true }))
+        await user.click(screen.getByRole('button', { name: 'Clear all', hidden: true }))
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
         stroke(surface, 20, 20)
         await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
-        expect(paint.mock.calls[0][3]).toBe(true)
+        expect(paint.mock.calls[0][2]).toBe(true)
+      })
+
+      it('Clear all asks first, and cancelling keeps the strokes', async () => {
+        const { user, paint, surface } = await start()
+        stroke(surface, 20, 20)
+        await user.click(screen.getByRole('button', { name: 'Clear all', hidden: true }))
+        const dialog = await screen.findByRole('alertdialog')
+        await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+        expect(screen.getByTestId('region-paint-surface')).toBeInTheDocument()
+        await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
+        expect(paint.mock.calls[0][1]).toHaveLength(1)
+        expect(paint.mock.calls[0][2]).toBe(false)
+      })
+
+      it('Clear all confirmed drops the strokes and replaces the stored mask', async () => {
+        const { user, paint, surface } = await start()
+        stroke(surface, 20, 20)
+        await user.click(screen.getByRole('button', { name: 'Clear all', hidden: true }))
+        const dialog = await screen.findByRole('alertdialog')
+        await user.click(within(dialog).getByRole('button', { name: 'Clear all' }))
+        stroke(surface, 30, 30)
+        await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
+        expect(paint.mock.calls[0][1]).toHaveLength(1)
+        expect(paint.mock.calls[0][1][0].points[0]).toEqual({ x: 30, y: 30 })
+        expect(paint.mock.calls[0][2]).toBe(true)
+      })
+
+      it('Clear all asks when only a stored mask would be lost', async () => {
+        const user = userEvent.setup()
+        setup()
+        vi.spyOn(commands, 'getPaintedMask').mockResolvedValue(new Uint8Array([1]).buffer as never)
+        const decode = vi.fn(async () => ({ close: vi.fn() }))
+        vi.stubGlobal('createImageBitmap', decode)
+        await user.click(screen.getByTestId('region-region-1'))
+        await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
+        await waitFor(() => expect(decode).toHaveBeenCalled())
+        await user.click(screen.getByRole('button', { name: 'Clear all', hidden: true }))
+        expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+        vi.unstubAllGlobals()
+      })
+
+      it('toggles stroke kind, keeps each stroke size and resets on re-entering Paint mode', async () => {
+        const { user, paint, surface } = await start()
+        const toggle = () => screen.getByRole('button', { name: 'Erase from mask', hidden: true })
+        expect(toggle()).toHaveAttribute('aria-pressed', 'false')
+        stroke(surface, 20, 20)
+        await user.click(toggle())
+        expect(toggle()).toHaveAttribute('aria-pressed', 'true')
+        const { diameter, color } = useKoharuStore.getState().brush
+        act(() => useKoharuStore.getState().setBrush({ color, diameter: diameter + 10 }))
+        stroke(surface, 30, 30)
+        await user.click(toggle())
+        stroke(surface, 40, 30)
+        await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
+        const strokes = paint.mock.calls[0][1]
+        expect(strokes.map((s) => s.erase)).toEqual([false, true, false])
+        expect(strokes.map((s) => s.diameter)).toEqual([diameter, diameter + 10, diameter + 10])
+
+        await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
+        expect(toggle()).toHaveAttribute('aria-pressed', 'false')
+        await user.click(toggle())
+        fireEvent.keyDown(window, { key: 'Escape' })
+        await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
+        expect(toggle()).toHaveAttribute('aria-pressed', 'false')
+      })
+
+      it('undoes an erase stroke like any other', async () => {
+        const { user, paint, surface } = await start()
+        stroke(surface, 20, 20)
+        await user.click(screen.getByRole('button', { name: 'Erase from mask', hidden: true }))
+        stroke(surface, 30, 30)
+        await user.click(screen.getByRole('button', { name: 'Undo stroke', hidden: true }))
+        await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
+        const strokes = paint.mock.calls[0][1]
+        expect(strokes).toHaveLength(1)
+        expect(strokes[0].erase).toBe(false)
       })
 
       // Pixels are checked in a real Chromium (see ticket 25); jsdom has no 2D canvas.

@@ -895,6 +895,16 @@ impl Project {
         self.commit(patch).await
     }
 
+    /// Drops the region's painted mask (one undo step), so it falls back to the default mask.
+    pub(crate) async fn clear_painted_mask(&mut self, region: EntityId) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let patch = snapshot.patch(|edit| {
+            edit.remove::<PaintedMask>(region)?;
+            edit.remove_asset(region, &AssetRole::new("painted-mask")?)
+        })?;
+        self.commit(patch).await
+    }
+
     /// Deletes regions together with the text recognized from them: a text region left without
     /// its content would block re-detection, and the box would be invisible to the user.
     /// Regions without recognized text (bubbles, panels) leave other entities untouched.
@@ -2292,6 +2302,11 @@ mod tests {
         project.undo().await.unwrap();
         assert_eq!(has_mask(&project), (false, false));
         project.redo().await.unwrap();
+        assert_eq!(has_mask(&project), (true, true));
+        let commit = project.clear_painted_mask(region).await.unwrap();
+        project.record_commit(&commit);
+        assert_eq!(has_mask(&project), (false, false));
+        project.undo().await.unwrap();
         assert_eq!(has_mask(&project), (true, true));
 
         let update = GeometryUpdate {

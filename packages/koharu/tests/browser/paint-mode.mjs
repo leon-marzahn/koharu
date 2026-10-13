@@ -64,7 +64,13 @@ try {
   await page.screenshot({ path: `${process.env.TMPDIR ?? '/tmp'}/paint-mode.png` })
 
   // 1. With a stroke (so Apply/Undo are enabled), each toolbar button is topmost at its centre.
-  for (const name of ['tools.cancelMask', 'tools.clearMask', 'tools.undoMask', 'tools.applyMask']) {
+  for (const name of [
+    'tools.cancelMask',
+    'tools.clearAllMask',
+    'tools.eraseFromMask',
+    'tools.undoMask',
+    'tools.applyMask',
+  ]) {
     const hit = await page.getByRole('button', { name }).evaluate((button) => {
       const r = button.getBoundingClientRect()
       const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
