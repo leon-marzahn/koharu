@@ -62,6 +62,7 @@ function textLayer(id: string, typography: Typography | null): Layer {
     typography,
     layout: 'paragraph',
     automatic_region: 'region',
+    locked: false,
   }
 }
 

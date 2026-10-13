@@ -10,12 +10,12 @@ use koharu_desktop::Frame;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Character, CharacterSheet, Commit,
     EntityId, EntityOrigin, FIT_SCALE, FitsTo, FlowsIn, Geometry as SceneGeometry,
-    Group as SceneGroup, Origin, PageDraft, PageStatus, PaintedMask, Point as ScenePoint, Presents,
-    Proposals, RasterLayer as SceneRasterLayer, RasterLayerKind, RecognizedFrom,
-    Region as SceneRegion, RemovePolicy, Revision, SceneDescription, Session, Snapshot,
-    SourceText as SceneSourceText, StalePage, Term, TermList, TextGroup as SceneTextGroup,
-    TextLayout as SceneTextLayout, TextLayoutKind, TextRegion, Translation as SceneTranslation,
-    Typography as SceneTypography, Visibility as SceneVisibility,
+    Group as SceneGroup, Locked, LocksBackfilled, Origin, PageDraft, PageStatus, PaintedMask,
+    Point as ScenePoint, Presents, Proposals, RasterLayer as SceneRasterLayer, RasterLayerKind,
+    RecognizedFrom, Region as SceneRegion, RemovePolicy, Revision, SceneDescription, Session,
+    Snapshot, SourceText as SceneSourceText, StalePage, Term, TermList,
+    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind, TextRegion,
+    Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
@@ -78,6 +78,8 @@ pub struct Page {
     pub regions: Vec<AnalysisRegion>,
     /// The page's scene description, generated or hand-written; `None` until described.
     pub description: Option<String>,
+    /// Translate keeps a locked description.
+    pub description_locked: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -97,6 +99,8 @@ pub enum Layer {
         angle_degrees: Option<f32>,
         visibility: LayerVisibility,
         content: Box<TextContent>,
+        /// Translate leaves a locked box as it is.
+        locked: bool,
         typography: Option<Typography>,
         layout: TextLayoutKind,
         automatic_region: Option<EntityId>,
@@ -282,14 +286,18 @@ impl Project {
         let session = Session::create(&path)
             .await
             .with_context(|| format!("failed to create {}", path.display()))?;
-        Ok(Self::new(session, name))
+        let mut project = Self::new(session, name);
+        project.backfill_locks().await?;
+        Ok(project)
     }
 
     pub(crate) async fn open(name: String, path: PathBuf) -> Result<Self> {
         let session = Session::open(&path)
             .await
             .with_context(|| format!("failed to open {}", path.display()))?;
-        Ok(Self::new(session, name))
+        let mut project = Self::new(session, name);
+        project.backfill_locks().await?;
+        Ok(project)
     }
 
     fn new(session: Session, name: String) -> Self {
@@ -457,8 +465,8 @@ impl Project {
         self.commit(patch).await
     }
 
-    /// A hand-written description is user-owned, so a rerun keeps it. Blank clears it, which
-    /// lets the next run describe the page again.
+    /// A hand-written description is locked in the same commit, so a rerun keeps it. Blank
+    /// clears it and its lock, which lets the next run describe the page again.
     pub(crate) async fn set_scene_description(
         &mut self,
         page: EntityId,
@@ -469,8 +477,13 @@ impl Project {
         let text = text.trim().to_owned();
         let patch = snapshot.patch(|edit| {
             if text.is_empty() {
-                edit.remove::<SceneDescription>(page)
+                edit.remove::<SceneDescription>(page)?;
+                if snapshot.component::<Locked>(page)?.is_some() {
+                    edit.remove::<Locked>(page)?;
+                }
+                Ok(())
             } else {
+                edit.set(page, &Locked {})?;
                 edit.set(
                     page,
                     &SceneDescription {
@@ -481,6 +494,59 @@ impl Project {
             }
         })?;
         self.commit(patch).await
+    }
+
+    /// Locks or unlocks a text layer (its translation) or a page (its description) as one commit.
+    pub(crate) async fn set_locked(&mut self, entity: EntityId, locked: bool) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let is_page = snapshot.page(entity).is_ok();
+        if !is_page {
+            Self::text_content(&snapshot, entity)?;
+        }
+        let patch = snapshot.patch(|edit| {
+            if locked {
+                edit.set(entity, &Locked {})
+            } else if snapshot.component::<Locked>(entity)?.is_some() {
+                edit.remove::<Locked>(entity)
+            } else {
+                Ok(())
+            }
+        })?;
+        self.commit(patch).await
+    }
+
+    /// Locks hand-edited translations and descriptions of projects that predate locks. The
+    /// project marker makes it run once, so a lock the user removed stays removed.
+    async fn backfill_locks(&mut self) -> Result<()> {
+        let snapshot = self.snapshot();
+        if snapshot.project_component::<LocksBackfilled>()?.is_some() {
+            return Ok(());
+        }
+        let patch = snapshot.patch(|edit| {
+            for page in snapshot.pages() {
+                if snapshot
+                    .component::<SceneDescription>(page.id())?
+                    .is_some_and(|description| matches!(description.origin, Origin::User))
+                {
+                    edit.set(page.id(), &Locked {})?;
+                }
+                let Some(group) = page.text_group()? else {
+                    continue;
+                };
+                for layer in group.text_layers()? {
+                    if layer
+                        .content()?
+                        .translation()?
+                        .is_some_and(|value| matches!(value.text.origin, Origin::User))
+                    {
+                        edit.set(layer.id(), &Locked {})?;
+                    }
+                }
+            }
+            edit.set_project(&LocksBackfilled {})
+        })?;
+        self.commit(patch).await?;
+        Ok(())
     }
 
     pub(crate) async fn rename_page(&mut self, page: EntityId, label: String) -> Result<Commit> {
@@ -642,13 +708,16 @@ impl Project {
             edit.promote_entity_to_user(layer)?;
             edit.promote_entity_to_user(content)?;
             match text {
-                Some(text) => edit.set(
-                    content,
-                    &SceneTranslation {
-                        text: Authored::user(text),
-                        language,
-                    },
-                ),
+                Some(text) => {
+                    edit.set(layer, &Locked {})?;
+                    edit.set(
+                        content,
+                        &SceneTranslation {
+                            text: Authored::user(text),
+                            language,
+                        },
+                    )
+                }
                 None => edit.remove::<SceneTranslation>(content),
             }
         })?;
@@ -1295,6 +1364,7 @@ impl Project {
             description: snapshot
                 .component::<SceneDescription>(page)?
                 .map(|description| description.text),
+            description_locked: snapshot.component::<Locked>(page)?.is_some(),
         })
     }
 
@@ -1342,6 +1412,7 @@ impl Project {
                     role,
                     source_region,
                 }),
+                locked: snapshot.component::<Locked>(layer)?.is_some(),
                 typography,
                 layout: layout.kind,
                 automatic_region,
@@ -1912,6 +1983,107 @@ mod tests {
 
         project.undo().await.unwrap();
         assert_eq!(status(&project), None);
+    }
+
+    fn locked(project: &Project, entity: EntityId) -> bool {
+        project
+            .snapshot()
+            .component::<Locked>(entity)
+            .unwrap()
+            .is_some()
+    }
+
+    async fn first_layer(project: &Project, page: EntityId) -> EntityId {
+        let snapshot = project.snapshot();
+        let group = snapshot.page(page).unwrap().text_group().unwrap().unwrap();
+        group.text_layers().unwrap().next().unwrap().id()
+    }
+
+    #[tokio::test]
+    async fn hand_edits_lock_in_the_same_undo_step_and_the_toggle_is_one_step() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        let page = page_with_source(&mut project, "a", "魔王").await;
+        let layer = first_layer(&project, page).await;
+        assert!(!locked(&project, layer));
+
+        let commit = project
+            .set_translation(layer, Some("Demon King".into()))
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        assert!(locked(&project, layer));
+        project.undo().await.unwrap();
+        assert!(!locked(&project, layer));
+
+        let commit = project
+            .set_scene_description(page, "a throne room".into())
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        assert!(locked(&project, page));
+        project.undo().await.unwrap();
+        assert!(!locked(&project, page));
+        assert!(
+            project
+                .snapshot()
+                .component::<SceneDescription>(page)
+                .unwrap()
+                .is_none()
+        );
+
+        for entity in [layer, page] {
+            let commit = project.set_locked(entity, true).await.unwrap();
+            project.record_commit(&commit);
+            assert!(locked(&project, entity));
+            let commit = project.set_locked(entity, false).await.unwrap();
+            project.record_commit(&commit);
+            assert!(!locked(&project, entity));
+            project.undo().await.unwrap();
+            assert!(locked(&project, entity));
+        }
+        // Only text layers and pages can be locked.
+        assert!(project.set_locked(EntityId::new(), true).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn backfill_locks_hand_edited_text_once_in_one_commit() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        let page = page_with_source(&mut project, "a", "魔王").await;
+        let layer = first_layer(&project, page).await;
+        let content = Project::text_content(&project.snapshot(), layer).unwrap();
+        let snapshot = project.snapshot();
+        let patch = snapshot
+            .patch(|edit| {
+                edit.set(
+                    content,
+                    &SceneTranslation {
+                        text: Authored::user("mine".to_owned()),
+                        language: None,
+                    },
+                )?;
+                edit.set(
+                    page,
+                    &SceneDescription {
+                        text: "mine".into(),
+                        origin: Origin::User,
+                    },
+                )
+            })
+            .unwrap();
+        project.session.commit(patch).await.unwrap();
+        assert!(!locked(&project, layer) && !locked(&project, page));
+
+        let before = project.revision();
+        project.backfill_locks().await.unwrap();
+        assert!(locked(&project, layer) && locked(&project, page));
+        assert_eq!(project.snapshot().revision().get(), before.get() + 1);
+
+        // Unlocking survives the next open: the marker stops a second backfill.
+        project.set_locked(layer, false).await.unwrap();
+        let revision = project.revision();
+        project.backfill_locks().await.unwrap();
+        assert!(!locked(&project, layer));
+        assert_eq!(project.revision(), revision);
     }
 
     #[tokio::test]

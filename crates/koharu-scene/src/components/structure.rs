@@ -165,6 +165,35 @@ impl Component for StalePage {
     }
 }
 
+/// Protects a text box (on the text layer) or a page's scene description (on the page) from
+/// Translate. User-authored: no `SHARED_WITH_PIPELINE`, so a pipeline run can neither add nor
+/// clear it. Hand edits add it in their own commit.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct Locked {}
+
+impl Component for Locked {
+    const KIND: &'static str = "dev.koharu.locked";
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        Ok(())
+    }
+}
+
+/// Project-level marker: hand-edited text already got its lock, so the backfill never reruns
+/// (otherwise unlocking and reopening would lock it again).
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct LocksBackfilled {}
+
+impl Component for LocksBackfilled {
+    const KIND: &'static str = "dev.koharu.locks-backfilled";
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        Ok(())
+    }
+}
+
 /// Marks a region whose "painted-mask" asset is the user's own page-sized inpainting mask.
 /// User-authored: the pipeline never writes it. Moving or resizing the region removes it
 /// (with the asset), because the mask was painted over the old box.

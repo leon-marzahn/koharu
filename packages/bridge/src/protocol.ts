@@ -41,6 +41,8 @@ export const commands = {
 	regions: AnalysisRegion[],
 	/**  The page's scene description, generated or hand-written; `None` until described. */
 	description: string | null,
+	/**  Translate keeps a locked description. */
+	description_locked: boolean,
 } | null>("get_page").then((v) => (v==null?v:({...v,layers:v.layers.map(i=>i),regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
 	listProjects: () => __TAURI_INVOKE<ProjectSummary[]>("list_projects"),
 	createProject: (name: string) => __TAURI_INVOKE<null>("create_project", { name }),
@@ -53,6 +55,7 @@ export const commands = {
 	setPageStatus: (page: EntityId, status: "in_progress" | "done" | null) => __TAURI_INVOKE<null>("set_page_status", { page, status }),
 	dismissStale: (pages: EntityId[]) => __TAURI_INVOKE<null>("dismiss_stale", { pages }),
 	setSceneDescription: (page: EntityId, text: string) => __TAURI_INVOKE<null>("set_scene_description", { page, text }),
+	setLocked: (entity: EntityId, locked: boolean) => __TAURI_INVOKE<null>("set_locked", { entity, locked }),
 	deletePages: (pages: EntityId[]) => __TAURI_INVOKE<null>("delete_pages", { pages }),
 	movePage: (page: EntityId, index: number) => __TAURI_INVOKE<null>("move_page", { page, index }),
 	setSourceText: (layer: EntityId, text: string) => __TAURI_INVOKE<null>("set_source_text", { layer, text }),
@@ -347,7 +350,9 @@ export type LanguageChoice = {
 	name: string,
 };
 
-export type Layer = { type: "group"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; name: string; role: GroupRole | null } | { type: "text"; id: EntityId; parent: EntityId | null; geometry: Geometry | null; angle_degrees: number | null; visibility: LayerVisibility; content: TextContent; typography: Typography | null; layout: TextLayoutKind; automatic_region: EntityId | null } | { type: "raster"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; image: string | null; name: string; kind: RasterLayerKind } | { type: "image"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string } | { type: "artwork"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string };
+export type Layer = { type: "group"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; name: string; role: GroupRole | null } | { type: "text"; id: EntityId; parent: EntityId | null; geometry: Geometry | null; angle_degrees: number | null; visibility: LayerVisibility; content: TextContent; 
+/**  Translate leaves a locked box as it is. */
+locked: boolean; typography: Typography | null; layout: TextLayoutKind; automatic_region: EntityId | null } | { type: "raster"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; image: string | null; name: string; kind: RasterLayerKind } | { type: "image"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string } | { type: "artwork"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string };
 
 export type LayerCommit = {
 	revision: Revision,
@@ -417,6 +422,8 @@ export type Page = {
 	regions: AnalysisRegion[],
 	/**  The page's scene description, generated or hand-written; `None` until described. */
 	description: string | null,
+	/**  Translate keeps a locked description. */
+	description_locked: boolean,
 };
 
 export type PageImportSource = "files" | "folder";

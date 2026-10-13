@@ -41,6 +41,7 @@ import {
   commands,
   type Layer,
   type Model,
+  type Page,
   type ModelSelection,
   type PageSummary,
   type Job,
@@ -101,6 +102,7 @@ const textLayer: Layer = {
   },
   layout: 'paragraph',
   automatic_region: null,
+  locked: false,
 }
 
 const secondLayer: Layer = {
@@ -203,6 +205,7 @@ function installProject() {
     layers: [textLayer],
     regions: [],
     description: null,
+    description_locked: false,
   }
   queryClient.setQueryData(projectKey, {
     name: 'Book',
@@ -664,6 +667,7 @@ describe('greenfield editor', () => {
         layers: [],
         regions: [],
         description: null,
+        description_locked: false,
       },
       {
         id: 'page-2',
@@ -672,6 +676,7 @@ describe('greenfield editor', () => {
         layers: [],
         regions: [],
         description: null,
+        description_locked: false,
       },
       {
         id: 'page-3',
@@ -680,6 +685,7 @@ describe('greenfield editor', () => {
         layers: [],
         regions: [],
         description: null,
+        description_locked: false,
       },
     ]
     queryClient.setQueryData(
@@ -806,6 +812,7 @@ describe('greenfield editor', () => {
       layers: [],
       regions: [],
       description: null,
+      description_locked: false,
     }
     queryClient.setQueryData(pagesKey, [
       ...(queryClient.getQueryData<PageSummary[]>(pagesKey) ?? []),
@@ -840,6 +847,7 @@ describe('greenfield editor', () => {
       layers: [],
       regions: [],
       description: null,
+      description_locked: false,
     }
     queryClient.setQueryData(pagesKey, [
       ...(queryClient.getQueryData<PageSummary[]>(pagesKey) ?? []),
@@ -951,6 +959,29 @@ describe('greenfield editor', () => {
       { scope: 'entities', value: ['element'] },
       { operation: 'translate_box', note: null },
     )
+  })
+
+  it('toggles a box lock through setLocked and disables its Translate controls while locked', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const setLocked = vi.spyOn(commands, 'setLocked').mockResolvedValue(null)
+    render(<Inspector />)
+
+    expect(screen.getByTestId('translate-box-element')).toBeEnabled()
+    // The refresh after the toggle fetches a page that carries the lock; the box can no longer
+    // be translated by hand.
+    const page = queryClient.getQueryData(pageKey) as Page
+    vi.spyOn(commands, 'getPage').mockResolvedValue({
+      ...page,
+      layers: page.layers.map((layer) =>
+        layer.type === 'text' ? { ...layer, locked: true } : layer,
+      ),
+    })
+    await user.click(screen.getByTestId('lock-element'))
+    expect(setLocked).toHaveBeenCalledWith('element', true)
+    await waitFor(() => expect(screen.getByTestId('translate-box-element')).toBeDisabled())
+    expect(screen.getByTestId('translate-note-element')).toBeDisabled()
+    expect(screen.getByTestId('lock-element')).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('sends a one-shot note for that box only and keeps it until the popover closes', async () => {

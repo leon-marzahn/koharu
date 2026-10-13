@@ -26,8 +26,8 @@ pub use layers::{
 pub use provenance::{Authored, Generation, Origin};
 pub use spatial::{Geometry, Point, Visibility};
 pub use structure::{
-    Character, CharacterSheet, CharacterUpdate, EntityOrigin, Page, PageDraft, PageStatus,
-    PaintedMask, Project, Proposals, Relation, RelationKind, SceneDescription, StalePage, Term,
-    TermList, TermUpdate,
+    Character, CharacterSheet, CharacterUpdate, EntityOrigin, Locked, LocksBackfilled, Page,
+    PageDraft, PageStatus, PaintedMask, Project, Proposals, Relation, RelationKind,
+    SceneDescription, StalePage, Term, TermList, TermUpdate,
 };
 pub use text::{LanguageTag, SourceText, TextContent, TextRole, Translation};

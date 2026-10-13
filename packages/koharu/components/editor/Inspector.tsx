@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
   Layers3,
   Lock,
+  LockOpen,
   Minus,
   Plus,
   RotateCcw,
@@ -650,6 +651,13 @@ function LayersInspector() {
 
       <div className='shrink-0 border-b border-border/80 px-2 py-1.5'>
         <InspectorField label={t('inspector.sceneDescription')}>
+          <LockToggle
+            id={page.id}
+            locked={page.description_locked}
+            lockLabel={t('inspector.lockDescription')}
+            unlockLabel={t('inspector.unlockDescription')}
+            onChanged={() => refresh(projectKey, pageKey)}
+          />
           <CommitTextarea
             key={page.id}
             aria-label={t('inspector.sceneDescription')}
@@ -991,7 +999,16 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
                   .catch(() => undefined)
               }
             />
-            <TranslateBox id={layer.id} />
+            <div className='flex items-center justify-end gap-0.5'>
+              <LockToggle
+                id={layer.id}
+                locked={layer.locked}
+                lockLabel={t('inspector.lockTranslation')}
+                unlockLabel={t('inspector.unlockTranslation')}
+                onChanged={() => refresh(projectKey, pageKey)}
+              />
+            </div>
+            <TranslateBox id={layer.id} locked={layer.locked} />
           </InspectorField>
         </>
       )}
@@ -1001,7 +1018,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
 
 // Translates one box through the entity scope. The note is one-shot: it lives only while the
 // popover is open and is never saved. The explanation arrives on the job and is kept in the store.
-function TranslateBox({ id }: { id: string }) {
+function TranslateBox({ id, locked }: { id: string; locked: boolean }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
@@ -1026,6 +1043,8 @@ function TranslateBox({ id }: { id: string }) {
           }}
         >
           <PopoverTrigger
+            disabled={locked}
+            title={locked ? t('inspector.unlockToTranslate') : undefined}
             data-testid={`translate-note-${id}`}
             className='h-5 rounded-md px-1.5 text-[9px] text-muted-foreground hover:text-foreground'
           >
@@ -1055,6 +1074,8 @@ function TranslateBox({ id }: { id: string }) {
           type='button'
           variant='ghost'
           size='xs'
+          disabled={locked}
+          title={locked ? t('inspector.unlockToTranslate') : undefined}
           data-testid={`translate-box-${id}`}
           className='h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
           onClick={() => void run('')}
@@ -1081,6 +1102,43 @@ function TranslateBox({ id }: { id: string }) {
         </div>
       )}
     </>
+  )
+}
+
+// Locks a box's translation or a page's description against Translate: one backend commit
+// (and so one undo step) per toggle.
+function LockToggle({
+  id,
+  locked,
+  lockLabel,
+  unlockLabel,
+  onChanged,
+}: {
+  id: string
+  locked: boolean
+  lockLabel: string
+  unlockLabel: string
+  onChanged: () => unknown
+}) {
+  const label = locked ? unlockLabel : lockLabel
+  return (
+    <Button
+      type='button'
+      variant='ghost'
+      size='xs'
+      data-testid={`lock-${id}`}
+      aria-label={label}
+      aria-pressed={locked}
+      title={label}
+      className={`h-5 w-5 justify-self-end rounded-md p-0 ${locked ? 'text-primary' : 'text-muted-foreground'}`}
+      onClick={() =>
+        void call(commands.setLocked, id, !locked)
+          .then(onChanged)
+          .catch(() => undefined)
+      }
+    >
+      {locked ? <Lock className='size-3' /> : <LockOpen className='size-3' />}
+    </Button>
   )
 }
 

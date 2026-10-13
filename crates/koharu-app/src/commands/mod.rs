@@ -78,6 +78,7 @@ pub fn bindings() -> tauri_specta::Builder<tauri_runtime_cef::CefRuntime> {
             editing::set_page_status,
             editing::dismiss_stale,
             editing::set_scene_description,
+            editing::set_locked,
             editing::delete_pages,
             editing::move_page,
             editing::set_source_text,

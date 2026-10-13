@@ -1,13 +1,13 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{
-    Authored, CharacterSheet, CharacterUpdate, EntityId, Generation, LanguageTag, Origin,
+    Authored, CharacterSheet, CharacterUpdate, EntityId, Generation, LanguageTag, Locked, Origin,
     Proposals, SceneDescription, Snapshot, SourceText, StalePage, TermList, TermUpdate,
     Translation,
 };
 use koharu_translator::{
-    TranslationCharacter, TranslationCharacterUpdate, TranslationContext, TranslationProposals,
-    TranslationRequest, TranslationTerm, TranslationTermUpdate, Translator,
+    Translated, TranslationCharacter, TranslationCharacterUpdate, TranslationContext,
+    TranslationProposals, TranslationRequest, TranslationTerm, TranslationTermUpdate, Translator,
 };
 
 use crate::TranslationConfig;
@@ -28,14 +28,34 @@ impl Processor {
 }
 
 /// Whether this run asks the description model for the page. A one-box run never does, and a
-/// page that already has a description (generated or hand-written) keeps it: clearing the text
-/// in the Inspector is how to describe the page again.
-fn should_describe(
-    configured: bool,
-    scoped_to_entities: bool,
-    existing: Option<&SceneDescription>,
-) -> bool {
-    configured && !scoped_to_entities && existing.is_none()
+/// locked description is kept; every other page run describes the page again.
+fn should_describe(configured: bool, scoped_to_entities: bool, description_locked: bool) -> bool {
+    configured && !scoped_to_entities && !description_locked
+}
+
+/// The boxes this run translates (in scope, with source text, not locked) and every locked text
+/// layer on the page. Locked boxes go to the model as context instead.
+fn translatable_boxes(input: &StageInput) -> Result<(Vec<(EntityId, String)>, Vec<EntityId>)> {
+    let mut targets = Vec::new();
+    let mut locked = Vec::new();
+    if let Some(group) = input.scene.page(input.page)?.text_group()? {
+        for layer in group.text_layers()? {
+            if input.scene.component::<Locked>(layer.id())?.is_some() {
+                locked.push(layer.id());
+                continue;
+            }
+            if !input.contains_entity(layer.id())? {
+                continue;
+            }
+            let content = layer.content()?;
+            if let Some(source) = content.source()?
+                && !source.text.value.trim().is_empty()
+            {
+                targets.push((content.id(), source.text.value));
+            }
+        }
+    }
+    Ok((targets, locked))
 }
 
 /// Source/translation pairs from the last `limit` pages before `page` that have any translation,
@@ -312,14 +332,26 @@ impl StageProcessor for Processor {
         self.translator.load_model(&self.config.model).await
     }
 
+    /// A page whose boxes are all locked has nothing to translate; it still runs when the
+    /// description will be redone.
+    fn skip(&self, input: &StageInput) -> Result<bool> {
+        let describes = self.config.description_model.is_some()
+            && should_describe(
+                true,
+                input.entities.is_some(),
+                input.scene.component::<Locked>(input.page)?.is_some(),
+            );
+        Ok(!describes && translatable_boxes(input)?.0.is_empty())
+    }
+
     async fn process(&self, input: StageInput) -> Result<koharu_scene::Patch> {
-        let mut targets = Vec::new();
+        let (targets, locked) = translatable_boxes(&input)?;
         // Entity scope translates only the chosen segments; the page's other segments go to the
-        // model as context so a single box reads like it does in a full run.
+        // model as context so a single box reads like it does in a full run. Locked boxes are
+        // context in every run, with their current translation.
         let mut siblings = Vec::new();
         if let Some(group) = input.scene.page(input.page)?.text_group()? {
             for layer in group.text_layers()? {
-                let in_scope = input.contains_entity(layer.id())?;
                 let content = layer.content()?;
                 let Some(source) = content.source()? else {
                     continue;
@@ -327,9 +359,8 @@ impl StageProcessor for Processor {
                 if source.text.value.trim().is_empty() {
                     continue;
                 }
-                if in_scope {
-                    targets.push((content.id(), source.text.value));
-                } else if input.entities.is_some() {
+                let is_target = input.contains_entity(layer.id())? && !locked.contains(&layer.id());
+                if !is_target && (input.entities.is_some() || locked.contains(&layer.id())) {
                     let translation = content.translation()?;
                     siblings.push(TranslationContext {
                         source: source.text.value,
@@ -358,6 +389,7 @@ impl StageProcessor for Processor {
         let terms = page_terms(&input.scene, &term_text)?;
         let characters = character_sheet(&input.scene)?;
         let existing = input.scene.component::<SceneDescription>(input.page)?;
+        let description_locked = input.scene.component::<Locked>(input.page)?.is_some();
         let mut description = existing.as_ref().map(|d| d.text.clone());
         let mut described = None;
         let mut appearances = Vec::new();
@@ -365,7 +397,7 @@ impl StageProcessor for Processor {
             .config
             .description_model
             .as_ref()
-            .filter(|_| should_describe(true, input.entities.is_some(), existing.as_ref()))
+            .filter(|_| should_describe(true, input.entities.is_some(), description_locked))
             && let Some(image) = input.images.get(&input.scene, input.page, "source").await?
         {
             let request = TranslationRequest::describing(self.config.target_language)
@@ -416,10 +448,17 @@ impl StageProcessor for Processor {
         {
             request = request.with_image(image);
         }
-        let (provider, mut translated) = self
-            .translator
-            .translate(&self.config.model, self.config.generation, request)
-            .await?;
+        // Every box is locked: only the description is redone, so there is nothing to translate.
+        // The description model's provider stamps the edit, since it is not the translation's.
+        let (provider, mut translated) = match (targets.is_empty(), &self.config.description_model)
+        {
+            (true, Some(model)) => (model.provider.into(), Translated::default()),
+            _ => {
+                self.translator
+                    .translate(&self.config.model, self.config.generation, request)
+                    .await?
+            }
+        };
         // ponytail: the explanation only travels as a progress event, so reloading loses it; the
         // upgrade is a stored component (revision, serde default, load test) written in this edit.
         if let (Some(explain), Some(text)) = (&input.explain, translated.explanation.take()) {
@@ -434,9 +473,9 @@ impl StageProcessor for Processor {
         let language = LanguageTag::new(self.config.target_language.tag())?;
         let generated = generation(PRODUCER, provider)?;
         let mut edit = input.scene.edit_as(generated.clone());
-        if input.entities.is_some() {
-            edit.replace_user_edits();
-        }
+        // Locks are the only protection: whatever is unlocked is the user's request to redo,
+        // hand-edited or not, so the authorship check must not block this edit.
+        edit.replace_user_edits();
         for (entity, _) in &targets {
             edit.observe::<SourceText>(*entity)?;
             edit.observe::<Translation>(*entity)?;
@@ -465,15 +504,14 @@ impl StageProcessor for Processor {
             translated.segments,
             &language,
             &generated,
-            // An entity-scoped run is the user asking for these boxes, so it replaces their edits.
             input.entities.is_some(),
         )?;
         finish(edit)
     }
 }
 
-/// Writes generated translations, keeping hand-edited ones unless `overwrite_user`, and clears the page's stale
-/// marker: the page is now translated against the current sheet and term list.
+/// Writes generated translations for the unlocked targets and clears the page's stale marker:
+/// the page is now translated against the current sheet and term list.
 fn write_translations(
     scene: &Snapshot,
     edit: &mut koharu_scene::Edit,
@@ -482,16 +520,9 @@ fn write_translations(
     segments: Vec<String>,
     language: &LanguageTag,
     generated: &Generation,
-    overwrite_user: bool,
+    scoped: bool,
 ) -> Result<()> {
     for ((entity, source), text) in targets.into_iter().zip(segments) {
-        if !overwrite_user
-            && scene
-                .component::<Translation>(entity)?
-                .is_some_and(|value| matches!(value.text.origin, Origin::User))
-        {
-            continue;
-        }
         let text = if source.trim() == "\u{2026}" {
             "\u{2026}".to_owned()
         } else {
@@ -505,8 +536,8 @@ fn write_translations(
             },
         )?;
     }
-    // A one-box run (overwrite_user) leaves the rest of the page stale.
-    if !overwrite_user && scene.component::<StalePage>(page)?.is_some() {
+    // A scoped run leaves the rest of the page stale.
+    if !scoped && scene.component::<StalePage>(page)?.is_some() {
         edit.remove::<StalePage>(page)?;
     }
     Ok(())
@@ -708,19 +739,136 @@ mod tests {
     }
 
     #[test]
-    fn description_runs_only_when_configured_unscoped_and_missing() {
-        let generation = Generation::new(koharu_scene::ProducerId::new(PRODUCER).unwrap());
-        let described = |origin| SceneDescription {
-            text: "x".into(),
-            origin,
+    fn description_runs_only_when_configured_unscoped_and_unlocked() {
+        assert!(should_describe(true, false, false));
+        assert!(!should_describe(true, false, true));
+        assert!(!should_describe(false, false, false));
+        assert!(!should_describe(true, true, false));
+    }
+
+    /// Locked boxes are context, not targets; a page of locked boxes is skipped unless the
+    /// description will be redone.
+    #[tokio::test]
+    async fn locked_boxes_are_not_translated_and_an_all_locked_page_is_skipped() {
+        let mut session = Session::memory().await.unwrap();
+        let (mut page, mut layers) = (None, Vec::new());
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let id = edit.add_page(PageDraft::new("p", 1.0, 1.0), At::End)?;
+                for source in ["a", "b"] {
+                    let content = edit.add_text_content(id, At::End)?;
+                    let layer = edit.add_text_layer(
+                        id,
+                        At::End,
+                        content,
+                        &TextLayout {
+                            origin: Origin::User,
+                            kind: TextLayoutKind::Paragraph,
+                            angle_degrees: None,
+                        },
+                    )?;
+                    edit.set(
+                        content,
+                        &SourceText {
+                            text: Authored::user(source.to_owned()),
+                            language: None,
+                        },
+                    )?;
+                    layers.push(layer);
+                }
+                page = Some(id);
+                Ok(())
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        let page = page.unwrap();
+        let input = |scene: &Snapshot| {
+            StageInput::new(
+                scene.clone(),
+                page,
+                None,
+                None,
+                std::sync::Arc::new(crate::ImageCache::default()),
+                None,
+            )
         };
-        let generated = described(Origin::Generated(generation));
-        let user = described(Origin::User);
-        assert!(should_describe(true, false, None));
-        assert!(!should_describe(true, false, Some(&generated)));
-        assert!(!should_describe(false, false, None));
-        assert!(!should_describe(true, true, None));
-        assert!(!should_describe(true, false, Some(&user)));
+        let processor = |description_model| {
+            Processor::new(
+                TranslationConfig {
+                    description_model,
+                    ..TranslationConfig::default()
+                },
+                Translator::from_config(
+                    koharu_ml::Device::cpu(),
+                    koharu_config::Config::memory(koharu_translator::ProvidersConfig::default()),
+                )
+                .unwrap(),
+            )
+        };
+        let (targets, locked) = translatable_boxes(&input(&scene)).unwrap();
+        assert_eq!((targets.len(), locked.len()), (2, 0));
+
+        let mut edit = scene.edit();
+        edit.set(layers[0], &Locked {}).unwrap();
+        let scene = session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap()
+            .snapshot;
+        let (targets, locked) = translatable_boxes(&input(&scene)).unwrap();
+        assert_eq!((targets.len(), locked), (1, vec![layers[0]]));
+        assert!(!processor(None).skip(&input(&scene)).unwrap());
+
+        let mut edit = scene.edit();
+        edit.set(layers[1], &Locked {}).unwrap();
+        let scene = session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap()
+            .snapshot;
+        assert!(processor(None).skip(&input(&scene)).unwrap());
+        let described = Some(koharu_translator::ModelSelection {
+            provider: koharu_translator::Provider::LmStudio,
+            model: None,
+            quantization: None,
+            vision: true,
+            reasoning: false,
+        });
+        assert!(!processor(described.clone()).skip(&input(&scene)).unwrap());
+
+        // A locked description is kept, so only then is the all-locked page skipped.
+        let mut edit = scene.edit();
+        edit.set(page, &Locked {}).unwrap();
+        let scene = session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap()
+            .snapshot;
+        assert!(processor(described).skip(&input(&scene)).unwrap());
+    }
+
+    /// A pipeline run can neither add nor clear a lock.
+    #[tokio::test]
+    async fn a_pipeline_run_cannot_add_or_remove_a_lock() {
+        let mut session = Session::memory().await.unwrap();
+        let mut page = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let id = edit.add_page(PageDraft::new("p", 1.0, 1.0), At::End)?;
+                edit.set(id, &Locked {})?;
+                page = Some(id);
+                Ok(())
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        let generated = generation(PRODUCER, "test").unwrap();
+        let mut edit = scene.edit_as(generated.clone());
+        edit.replace_user_edits();
+        assert!(edit.remove::<Locked>(page.unwrap()).is_err());
+        let mut edit = scene.edit_as(generated);
+        assert!(edit.set(page.unwrap(), &Locked {}).is_err());
     }
 
     #[tokio::test]
@@ -977,7 +1125,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retranslation_keeps_user_edits_and_clears_the_stale_marker() {
+    async fn retranslation_replaces_unlocked_hand_edits_and_clears_the_stale_marker() {
         let mut session = Session::memory().await.unwrap();
         let (mut page, mut machine, mut manual) = (None, None, None);
         let patch = session
@@ -1042,6 +1190,7 @@ mod tests {
 
         let language = LanguageTag::new("en").unwrap();
         let mut edit = scene.edit_as(generated.clone());
+        edit.replace_user_edits();
         write_translations(
             &scene,
             &mut edit,
@@ -1067,10 +1216,13 @@ mod tests {
                 .text
                 .value
         };
-        assert_eq!((text(machine), text(manual)), ("new".into(), "mine".into()));
+        assert_eq!(
+            (text(machine), text(manual)),
+            ("new".into(), "overwritten".into())
+        );
         assert!(scene.component::<StalePage>(page).unwrap().is_none());
 
-        // One-box translate overwrites the hand edit as a single commit; undo restores it.
+        // One-box translate overwrites as a single commit; undo restores the earlier text.
         let mut edit = scene.edit_as(generated.clone());
         edit.replace_user_edits();
         write_translations(
@@ -1087,7 +1239,7 @@ mod tests {
         let commit = session.commit(edit.finish().unwrap()).await.unwrap();
         assert_eq!(text_of(&commit.snapshot, manual), "fresh");
         let undone = session.undo(commit.revision).await.unwrap().snapshot;
-        assert_eq!(text_of(&undone, manual), "mine");
+        assert_eq!(text_of(&undone, manual), "overwritten");
     }
 
     fn text_of(scene: &Snapshot, entity: EntityId) -> String {
