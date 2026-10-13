@@ -1303,16 +1303,23 @@ describe('greenfield editor', () => {
       it('loads the stored mask and shows a page-pixel canvas only in Paint mode', async () => {
         const user = userEvent.setup()
         setup()
-        const mask = vi.spyOn(commands, 'getPaintedMask').mockResolvedValue([])
+        // Tauri delivers the raw binary reply as an ArrayBuffer, not number[].
+        const mask = vi
+          .spyOn(commands, 'getPaintedMask')
+          .mockResolvedValue(new Uint8Array([1, 2, 3]).buffer as never)
+        const decode = vi.fn(async () => ({ close: vi.fn() }))
+        vi.stubGlobal('createImageBitmap', decode)
         await user.click(screen.getByTestId('region-region-1'))
         expect(mask).not.toHaveBeenCalled()
         expect(screen.queryByTestId('region-paint-canvas')).not.toBeInTheDocument()
         await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
         expect(mask).toHaveBeenCalledWith('region-1')
+        await waitFor(() => expect(decode).toHaveBeenCalledTimes(1))
         const canvas = screen.getByTestId('region-paint-canvas') as HTMLCanvasElement
         expect(canvas.width).toBeGreaterThan(0)
         fireEvent.keyDown(window, { key: 'Escape' })
         expect(screen.queryByTestId('region-paint-canvas')).not.toBeInTheDocument()
+        vi.unstubAllGlobals()
       })
 
       it('cancels with Escape without applying anything', async () => {

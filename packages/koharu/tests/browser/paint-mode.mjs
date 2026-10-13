@@ -34,11 +34,11 @@ try {
   await page.getByRole('button', { name: 'tools.paintMask' }).click()
   await page.waitForFunction(() => window.calls.some((c) => c.cmd === 'get_painted_mask'))
 
-  // Paint surface covers the region box (CSS 140..340 x 140..240) plus the 2 px pad only.
+  // Paint surface covers the region box (CSS 140..340 x 140..240) exactly (no pad).
   const surface = await page.getByTestId('region-paint-surface').boundingBox()
-  assert.deepEqual(surface, { x: 138, y: 138, width: 204, height: 104 })
+  assert.deepEqual(surface, { x: 140, y: 140, width: 200, height: 100 })
 
-  // 3a. Stored mask (page px 120..160) is drawn: canvas px 22..62.
+  // 3a. Stored mask (page px 120..160) is drawn: canvas px 20..60.
   const alphaAt = (x, y) =>
     page
       .getByTestId('region-paint-canvas')
@@ -48,7 +48,7 @@ try {
       document
         .querySelector('[data-testid=region-paint-canvas]')
         .getContext('2d')
-        .getImageData(42, 42, 1, 1).data[3] > 0,
+        .getImageData(40, 40, 1, 1).data[3] > 0,
     null,
     { timeout: 3000 },
   )
@@ -59,7 +59,7 @@ try {
   await page.mouse.move(270, 190, { steps: 5 })
   await page.mouse.move(300, 190, { steps: 5 })
   await page.mouse.up()
-  assert.ok((await alphaAt(132, 52)) > 0, 'stroke not drawn')
+  assert.ok((await alphaAt(130, 50)) > 0, 'stroke not drawn')
   // Final window pixels, not just the canvas backing store.
   await page.screenshot({ path: `${process.env.TMPDIR ?? '/tmp'}/paint-mode.png` })
 
@@ -75,8 +75,8 @@ try {
 
   // 2. Ctrl+Z undoes the stroke only; the global handler never sees it.
   await page.keyboard.press('Control+z')
-  assert.equal(await alphaAt(132, 52), 0, 'stroke not undone')
-  assert.ok((await alphaAt(42, 42)) > 0, 'stored mask lost on undo')
+  assert.equal(await alphaAt(130, 50), 0, 'stroke not undone')
+  assert.ok((await alphaAt(40, 40)) > 0, 'stored mask lost on undo')
   assert.equal(await page.evaluate(() => window.globalUndos), 0, 'global undo also ran')
 
   // Apply sends the stroke; toolbar click goes through.

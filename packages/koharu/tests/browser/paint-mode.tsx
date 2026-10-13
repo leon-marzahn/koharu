@@ -23,7 +23,8 @@ m.fillStyle = '#000'
 m.fillRect(0, 0, 800, 600)
 m.fillStyle = '#fff'
 m.fillRect(120, 120, 40, 40)
-const maskBytes = Array.from(new Uint8Array(await (await mask.convertToBlob()).arrayBuffer()))
+// Tauri delivers raw binary replies as an ArrayBuffer, not number[].
+const maskBytes = await (await mask.convertToBlob()).arrayBuffer()
 
 window.calls = []
 window.__TAURI_INTERNALS__ = {

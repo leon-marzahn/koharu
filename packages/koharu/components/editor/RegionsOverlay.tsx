@@ -34,18 +34,6 @@ function regionFrame({ geometry }: AnalysisRegion): Frame {
   return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y, angle_degrees: 0 }
 }
 
-// A painted mask may reach 2 px past the region box: the padding the backend cleans with.
-const PAINT_PAD = 2
-function paddedFrame(frame: Frame): Frame {
-  return {
-    ...frame,
-    x: frame.x - PAINT_PAD,
-    y: frame.y - PAINT_PAD,
-    width: frame.width + PAINT_PAD * 2,
-    height: frame.height + PAINT_PAD * 2,
-  }
-}
-
 function framePoints({ x, y, width, height, angle_degrees }: Frame) {
   const [cx, cy] = [x + width / 2, y + height / 2]
   const [sin, cos] = [
@@ -100,7 +88,7 @@ export function RegionsOverlay({
     cleared: boolean
   } | null>(null)
   const [storedMask, setStoredMask] = useState<ImageBitmap | null>(null)
-  const paintFrame = region && painting ? paddedFrame(regionFrame(region)) : null
+  const paintFrame = region && painting ? regionFrame(region) : null
   // Fetched only in Paint mode; re-entering Paint mode after Apply refetches it.
   const maskRegion = painting ? region?.id : undefined
   const canvas = useRef<HTMLCanvasElement | null>(null)
@@ -112,8 +100,10 @@ export function RegionsOverlay({
     let bitmap: ImageBitmap | null = null
     void call(commands.getPaintedMask, maskRegion)
       .then(async (bytes) => {
-        if (!live || !bytes.length) return
-        bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
+        // Tauri hands raw binary replies over as an ArrayBuffer, whatever protocol.ts says.
+        const data = new Uint8Array(bytes as ArrayBuffer | number[])
+        if (!live || !data.length) return
+        bitmap = await createImageBitmap(new Blob([data], { type: 'image/png' }))
         if (live) setStoredMask(bitmap)
         else bitmap.close()
       })
