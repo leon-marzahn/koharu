@@ -8,8 +8,8 @@ Tests, written first: Rust test that a locked box's `SourceText` is unchanged af
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] OCR never rewrites the source text of a locked box
-- [ ] Unlocked boxes on the same page still update
-- [ ] Rust test above passes
+- [x] OCR never rewrites the source text of a locked box
+- [x] Unlocked boxes on the same page still update
+- [x] Rust test above passes
