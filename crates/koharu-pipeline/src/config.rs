@@ -200,6 +200,9 @@ pub struct TranslationConfig {
     /// Appended to the describe system prompt. The translation `instructions` are never sent.
     #[serde(default)]
     pub description_instructions: Option<String>,
+    /// How many earlier page descriptions to send with a description request; 0 sends none.
+    #[serde(default)]
+    pub description_previous_pages: u32,
 }
 
 impl TranslationConfig {
@@ -230,6 +233,7 @@ impl Default for TranslationConfig {
             description_model: None,
             description_generation: None,
             description_instructions: None,
+            description_previous_pages: 0,
         }
     }
 }
@@ -355,7 +359,7 @@ mod tests {
             .filter(|line| !line.starts_with("previous_pages"))
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(!old.contains("previous_pages"));
+        assert!(!old.lines().any(|line| line.starts_with("previous_pages")));
 
         let config: PipelineConfig = toml::from_str(&old).unwrap();
         assert_eq!(config.translation.previous_pages, 2);
@@ -368,8 +372,10 @@ mod tests {
         let translation = value["translation"].as_table_mut().unwrap();
         translation.remove("description_generation");
         translation.remove("description_instructions");
+        translation.remove("description_previous_pages");
 
         let config: PipelineConfig = value.try_into().unwrap();
+        assert_eq!(config.translation.description_previous_pages, 0);
         assert_eq!(config.translation.description_generation().reasoning, None);
         assert_eq!(config.translation.description_instructions, None);
     }

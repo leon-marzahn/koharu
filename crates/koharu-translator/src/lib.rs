@@ -17,8 +17,9 @@ use error::{Error, Result};
 use local::LocalTranslator;
 
 pub use backend::{
-    Translated, TranslationCharacter, TranslationCharacterUpdate, TranslationContext,
-    TranslationProposals, TranslationRequest, TranslationTerm, TranslationTermUpdate,
+    PreviousDescription, Translated, TranslationCharacter, TranslationCharacterUpdate,
+    TranslationContext, TranslationProposals, TranslationRequest, TranslationTerm,
+    TranslationTermUpdate,
 };
 pub use language::Language;
 pub use model::{GenerationConfig, Model, ModelSelection, Quantization};

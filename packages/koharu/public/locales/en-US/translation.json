@@ -448,6 +448,8 @@
       "clear": "Don't describe",
       "outputDescription": "The description is written in the Translation page's target language.",
       "instructionsDescription": "Extra guidance for the description, such as what to focus on.",
+      "previousPages": "Previous pages",
+      "previousPagesDescription": "How many earlier page descriptions are sent so each page is described with continuity. Set 0 to describe every page alone.",
       "instructionsLabel": "Description instructions",
       "instructionsPlaceholder": "Optional guidance for describing pages"
     },

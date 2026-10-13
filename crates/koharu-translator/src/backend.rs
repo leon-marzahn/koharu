@@ -33,6 +33,16 @@ pub struct TranslationRequest {
     /// A description request: no segments, the page image goes in and a description comes out.
     /// It rides the translation request so every provider's existing image path serves it.
     pub describe: bool,
+    /// Descriptions of earlier pages, oldest first, sent with a description request only.
+    pub previous_descriptions: Vec<PreviousDescription>,
+}
+
+/// An earlier page's Scene Description, sent so the next page is described with continuity.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PreviousDescription {
+    /// 1-based position in the project's page order.
+    pub page: usize,
+    pub text: String,
 }
 
 impl TranslationRequest {
@@ -42,6 +52,15 @@ impl TranslationRequest {
         let mut request = Self::new(Vec::<String>::new(), target_language);
         request.describe = true;
         request
+    }
+
+    #[must_use]
+    pub fn with_previous_descriptions(
+        mut self,
+        descriptions: impl IntoIterator<Item = PreviousDescription>,
+    ) -> Self {
+        self.previous_descriptions = descriptions.into_iter().collect();
+        self
     }
 
     #[must_use]
@@ -70,6 +89,7 @@ impl TranslationRequest {
             previous_translation: None,
             scene_description: None,
             describe: false,
+            previous_descriptions: Vec::new(),
         }
     }
 

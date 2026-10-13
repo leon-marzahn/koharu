@@ -121,6 +121,7 @@ impl Arguments {
                 description_model: None,
                 description_generation: None,
                 description_instructions: None,
+                description_previous_pages: 0,
             },
             inpainting: match self.inpainting {
                 InpaintingChoice::LaMa => InpaintingModel::LaMa {},

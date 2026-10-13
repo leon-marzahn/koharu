@@ -2432,6 +2432,23 @@ describe('greenfield editor', () => {
     )
 
     save.mockClear()
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Previous pages' }), {
+      target: { value: '3' },
+    })
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            description_previous_pages: 3,
+            previous_pages: 2,
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+
+    save.mockClear()
     await user.click(screen.getByRole('button', { name: "Don't describe" }))
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith(

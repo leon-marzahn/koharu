@@ -448,6 +448,8 @@
       "clear": "설명하지 않음",
       "outputDescription": "설명은 번역 페이지의 대상 언어로 작성됩니다.",
       "instructionsDescription": "설명에 대한 추가 지침(예: 집중할 내용).",
+      "previousPages": "이전 페이지",
+      "previousPagesDescription": "연속성을 유지하며 설명하도록 보낼 이전 페이지 설명의 수입니다. 0이면 각 페이지를 따로 설명합니다.",
       "instructionsLabel": "설명 지침",
       "instructionsPlaceholder": "페이지 설명에 대한 선택적 지침"
     },

@@ -223,6 +223,48 @@ mod tests {
         assert_eq!(scheduler.start_next(&busy), Some((pages[1], Stage::Ocr)));
     }
 
+    /// The translation lane is one page at a time, so page N's description is committed before
+    /// page N+1 is described; the executor reads its scene fresh for every job. Holds whichever
+    /// running stage finishes first.
+    #[test]
+    fn a_page_translates_only_after_the_previous_page_finished_translating() {
+        for finish_newest_first in [false, true] {
+            let pages = pages(3);
+            let mut scheduler = Scheduler::new(&pages, &Stage::ALL);
+            let (mut busy, mut running, mut events) = (BTreeSet::new(), Vec::new(), Vec::new());
+            loop {
+                while let Some(job) = scheduler.start_next(&busy) {
+                    busy.insert(job.1);
+                    events.push(("start", job));
+                    running.push(job);
+                }
+                if running.is_empty() {
+                    break;
+                }
+                let job = running.remove(if finish_newest_first {
+                    running.len() - 1
+                } else {
+                    0
+                });
+                busy.remove(&job.1);
+                events.push(("done", job));
+                scheduler.complete_stage(job.0, job.1);
+            }
+            let at = |kind, page, stage| {
+                events
+                    .iter()
+                    .position(|event| *event == (kind, (page, stage)))
+                    .unwrap()
+            };
+            for pair in pages.windows(2) {
+                assert!(
+                    at("done", pair[0], Stage::Translation)
+                        < at("start", pair[1], Stage::Translation)
+                );
+            }
+        }
+    }
+
     fn run_order(stages: &[Stage]) -> Vec<Stage> {
         let pages = pages(1);
         let mut scheduler = Scheduler::new(&pages, stages);

@@ -5,12 +5,13 @@ use async_trait::async_trait;
 use image::{DynamicImage, GenericImageView as _};
 use koharu_scene::{
     Authored, CharacterSheet, CharacterUpdate, EntityId, Generation, LanguageTag, Locked, Origin,
-    Proposals, RasterLayer, RasterLayerKind, SceneDescription, Snapshot, SourceText, StalePage,
-    TermList, TermUpdate, Translation,
+    PageRef, Proposals, RasterLayer, RasterLayerKind, SceneDescription, Snapshot, SourceText,
+    StalePage, TermList, TermUpdate, Translation,
 };
 use koharu_translator::{
-    Translated, TranslationCharacter, TranslationCharacterUpdate, TranslationContext,
-    TranslationProposals, TranslationRequest, TranslationTerm, TranslationTermUpdate, Translator,
+    PreviousDescription, Translated, TranslationCharacter, TranslationCharacterUpdate,
+    TranslationContext, TranslationProposals, TranslationRequest, TranslationTerm,
+    TranslationTermUpdate, Translator,
 };
 
 use crate::TranslationConfig;
@@ -61,6 +62,26 @@ fn translatable_boxes(input: &StageInput) -> Result<(Vec<(EntityId, String)>, Ve
     Ok((targets, locked))
 }
 
+/// What `pick` finds on the last `limit` pages before `page` that have anything, in reading
+/// order. `pick` gets the page's 1-based number; pages it returns `None` for use no window.
+fn previous_pages<T>(
+    scene: &Snapshot,
+    page: EntityId,
+    limit: u32,
+    mut pick: impl FnMut(usize, PageRef<'_>) -> Result<Option<T>>,
+) -> Result<Vec<T>> {
+    let mut found = Vec::new();
+    for (index, candidate) in scene
+        .pages()
+        .enumerate()
+        .take_while(|(_, candidate)| candidate.id() != page)
+    {
+        found.extend(pick(index + 1, candidate)?);
+    }
+    let skip = found.len().saturating_sub(limit as usize);
+    Ok(found.split_off(skip))
+}
+
 /// Source/translation pairs from the last `limit` pages before `page` that have any translation,
 /// in reading order. Uses the current translation, so user edits win and are flagged.
 fn previous_page_hints(
@@ -68,8 +89,7 @@ fn previous_page_hints(
     page: EntityId,
     limit: u32,
 ) -> Result<Vec<TranslationContext>> {
-    let mut pages = Vec::new();
-    for candidate in scene.pages().take_while(|candidate| candidate.id() != page) {
+    let pages = previous_pages(scene, page, limit, |_, candidate| {
         let mut lines = Vec::new();
         if let Some(group) = candidate.text_group()? {
             for layer in group.text_layers()? {
@@ -88,12 +108,26 @@ fn previous_page_hints(
                 });
             }
         }
-        if !lines.is_empty() {
-            pages.push(lines);
-        }
-    }
-    let skip = pages.len().saturating_sub(limit as usize);
-    Ok(pages.into_iter().skip(skip).flatten().collect())
+        Ok((!lines.is_empty()).then_some(lines))
+    })?;
+    Ok(pages.into_iter().flatten().collect())
+}
+
+/// The Scene Descriptions of the last `limit` described pages before `page`, oldest first.
+fn previous_descriptions(
+    scene: &Snapshot,
+    page: EntityId,
+    limit: u32,
+) -> Result<Vec<PreviousDescription>> {
+    previous_pages(scene, page, limit, |number, candidate| {
+        Ok(scene
+            .component::<SceneDescription>(candidate.id())?
+            .filter(|description| !description.text.trim().is_empty())
+            .map(|description| PreviousDescription {
+                page: number,
+                text: description.text,
+            }))
+    })
 }
 
 fn proposals(scene: &Snapshot) -> Result<Proposals> {
@@ -371,6 +405,11 @@ impl Processor {
         };
         let mut request = TranslationRequest::describing(self.config.target_language)
             .with_characters(characters.to_vec())
+            .with_previous_descriptions(previous_descriptions(
+                &input.scene,
+                input.page,
+                self.config.description_previous_pages,
+            )?)
             .with_image(image);
         if let Some(instructions) = self.config.description_instructions.as_deref() {
             request = request.with_instructions(instructions);
@@ -884,6 +923,59 @@ mod tests {
         assert_eq!(lines(pages[4], 1), [("d".into(), "D".into(), false)]);
         assert_eq!(lines(pages[4], 0), []);
         assert_eq!(lines(pages[0], 2), []);
+    }
+
+    /// Page numbers are project order; undescribed pages are skipped and use no window; a
+    /// description committed since the last snapshot is seen by the next page's lookup.
+    #[tokio::test]
+    async fn previous_descriptions_are_the_last_n_described_pages_oldest_first() {
+        let mut session = Session::memory().await.unwrap();
+        let mut pages = Vec::new();
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                for index in 0..4 {
+                    pages
+                        .push(edit.add_page(PageDraft::new(index.to_string(), 1.0, 1.0), At::End)?);
+                }
+                edit.set(pages[0], &described("one"))?;
+                edit.set(pages[2], &described("three"))?;
+                Ok(())
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        let texts = |scene: &Snapshot, page, limit| {
+            previous_descriptions(scene, page, limit)
+                .unwrap()
+                .into_iter()
+                .map(|found| (found.page, found.text))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(texts(&scene, pages[3], 0), []);
+        assert_eq!(texts(&scene, pages[3], 1), [(3, "three".into())]);
+        assert_eq!(
+            texts(&scene, pages[3], 5),
+            [(1, "one".into()), (3, "three".into())]
+        );
+        assert_eq!(texts(&scene, pages[0], 5), []);
+
+        // The previous page of a bulk run: its description lands, the next lookup sees it.
+        assert_eq!(texts(&scene, pages[2], 1), [(1, "one".into())]);
+        let mut edit = scene.edit();
+        edit.set(pages[1], &described("two")).unwrap();
+        let scene = session
+            .commit(edit.finish().unwrap())
+            .await
+            .unwrap()
+            .snapshot;
+        assert_eq!(texts(&scene, pages[2], 1), [(2, "two".into())]);
+    }
+
+    fn described(text: &str) -> SceneDescription {
+        SceneDescription {
+            text: text.into(),
+            origin: Origin::User,
+        }
     }
 
     async fn scene_with(

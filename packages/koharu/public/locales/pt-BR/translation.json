@@ -448,6 +448,8 @@
       "clear": "Não descrever",
       "outputDescription": "A descrição é escrita no idioma de destino da página Tradução.",
       "instructionsDescription": "Orientações extras para a descrição, como no que se concentrar.",
+      "previousPages": "Páginas anteriores",
+      "previousPagesDescription": "Quantas descrições de páginas anteriores são enviadas para descrever cada página com continuidade. 0 descreve cada página isoladamente.",
       "instructionsLabel": "Instruções de descrição",
       "instructionsPlaceholder": "Orientações opcionais para descrever páginas"
     },

@@ -11,9 +11,9 @@ Out of scope: sending previous pages' images; grouping pages (ticket 18).
 
 **Blocked by:** 34 Description settings
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `description_previous_pages` loads from a config without it and defaults to 0; 0 sends nothing extra
-- [ ] N > 0 adds the previous N described pages (number and text) to the describe request, oldest first, skipping pages with no description
-- [ ] In a bulk run the second page's request includes the first page's description written in the same run
-- [ ] The Description page has the number field; nine locales
+- [x] `description_previous_pages` loads from a config without it and defaults to 0; 0 sends nothing extra
+- [x] N > 0 adds the previous N described pages (number and text) to the describe request, oldest first, skipping pages with no description
+- [x] In a bulk run the second page's request includes the first page's description written in the same run
+- [x] The Description page has the number field; nine locales

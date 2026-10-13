@@ -448,6 +448,8 @@
       "clear": "Açıklama yapma",
       "outputDescription": "Açıklama, Çeviri sayfasındaki hedef dilde yazılır.",
       "instructionsDescription": "Açıklama için ek yönergeler, örneğin nelere odaklanılacağı.",
+      "previousPages": "Önceki sayfalar",
+      "previousPagesDescription": "Her sayfa süreklilikle betimlensin diye kaç önceki sayfa betimlemesinin gönderileceği. 0, her sayfayı tek başına betimler.",
       "instructionsLabel": "Açıklama yönergeleri",
       "instructionsPlaceholder": "Sayfaları açıklamak için isteğe bağlı yönergeler"
     },

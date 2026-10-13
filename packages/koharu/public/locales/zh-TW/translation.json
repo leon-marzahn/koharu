@@ -448,6 +448,8 @@
       "clear": "不描述",
       "outputDescription": "描述使用「翻譯」頁面中的目標語言撰寫。",
       "instructionsDescription": "對描述的額外指引，例如需要關注的內容。",
+      "previousPages": "前面的頁面",
+      "previousPagesDescription": "傳送前面若干頁的描述，使每頁的描述保持連貫。設為 0 則單獨描述每一頁。",
       "instructionsLabel": "描述指令",
       "instructionsPlaceholder": "可選的頁面描述指引"
     },

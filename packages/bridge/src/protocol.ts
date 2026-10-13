@@ -657,6 +657,8 @@ export type TranslationConfig = {
 	description_generation?: GenerationConfig | null,
 	/**  Appended to the describe system prompt. The translation `instructions` are never sent. */
 	description_instructions?: string | null,
+	/**  How many earlier page descriptions to send with a description request; 0 sends none. */
+	description_previous_pages?: number,
 };
 
 export type TypesettingConfig = {

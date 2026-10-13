@@ -12,8 +12,12 @@ use crate::{
 
 pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, String)> {
     if request.describe {
-        let user = serde_json::to_string(&json!({ "characters": request.characters }))
-            .context("failed to serialize description input")?;
+        let mut input = json!({ "characters": request.characters });
+        if !request.previous_descriptions.is_empty() {
+            input["previous_pages"] = json!(request.previous_descriptions);
+        }
+        let user =
+            serde_json::to_string(&input).context("failed to serialize description input")?;
         return Ok((description_system_prompt(request), user));
     }
     let input = TranslationInput {
@@ -341,6 +345,14 @@ fn description_system_prompt(request: &TranslationRequest) -> String {
             Compare everyone on the page with those entries. When someone matches a character, call them by that character's `target_name` (for example 'Adachi') and do not describe their looks; the translator already knows them. Describe by looks only people who match nobody.
         "}.trim_end());
     }
+    if !request.previous_descriptions.is_empty() {
+        prompt.push_str("\n\n");
+        prompt.push_str(indoc! {"
+            Previous pages requirements:
+            The `previous_pages` array holds the descriptions of the pages just before this one, oldest first, each with its page number.
+            Use them only for continuity: who is where and what changed. Describe only the attached page; do not repeat or summarize them.
+        "}.trim_end());
+    }
     if let Some(instructions) = request
         .instructions
         .as_deref()
@@ -599,6 +611,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::PreviousDescription;
 
     #[test]
     fn snippet_keeps_a_response_on_one_line() {
@@ -1014,6 +1027,29 @@ mod tests {
             .with_instructions("Name the setting.");
         let prompt = description_system_prompt(&request);
         assert!(prompt.ends_with("Additional instructions:\nName the setting."));
+    }
+
+    #[test]
+    fn description_request_sends_previous_pages_oldest_first_only_when_given() {
+        let plain = TranslationRequest::describing(Language::English);
+        let (system, user) = prompts(&plain).unwrap();
+        assert!(!system.contains("previous_pages") && !user.contains("previous_pages"));
+
+        let request = plain.with_previous_descriptions([
+            PreviousDescription {
+                page: 3,
+                text: "A quarrel.".into(),
+            },
+            PreviousDescription {
+                page: 4,
+                text: "Rain.".into(),
+            },
+        ]);
+        let (system, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+        assert_eq!(input["previous_pages"][0]["page"], 3);
+        assert_eq!(input["previous_pages"][1]["text"], "Rain.");
+        assert!(system.contains("do not repeat"));
     }
 
     #[test]

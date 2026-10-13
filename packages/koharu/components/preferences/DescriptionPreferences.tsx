@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { GenerationPreferences } from '@/components/preferences/GenerationPreferences'
 import {
+  NumberField,
   PreferencePage,
   PreferenceRow,
   PreferenceSection,
@@ -157,6 +158,22 @@ export function DescriptionPreferences({
             placeholder={t('settings.description.instructionsPlaceholder')}
             onChange={(event) =>
               onChange({ ...value, description_instructions: event.currentTarget.value || null })
+            }
+          />
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.description.previousPages')}
+          description={t('settings.description.previousPagesDescription')}
+        >
+          <NumberField
+            label={t('settings.description.previousPages')}
+            value={value.description_previous_pages ?? 0}
+            min={0}
+            max={10}
+            step={1}
+            onChange={(pages) =>
+              pages !== null &&
+              onChange({ ...value, description_previous_pages: Math.trunc(pages) })
             }
           />
         </PreferenceRow>

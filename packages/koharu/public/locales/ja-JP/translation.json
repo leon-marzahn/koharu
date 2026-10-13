@@ -448,6 +448,8 @@
       "clear": "説明しない",
       "outputDescription": "説明は「翻訳」ページの翻訳先言語で書かれます。",
       "instructionsDescription": "説明への追加の指示（注目する点など）。",
+      "previousPages": "前のページ",
+      "previousPagesDescription": "連続性を保って説明するために送信する、前のページの説明の数。0 にすると各ページを単独で説明します。",
       "instructionsLabel": "説明の指示",
       "instructionsPlaceholder": "ページの説明に関する任意の指示"
     },
