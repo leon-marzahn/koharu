@@ -602,7 +602,18 @@ export function CanvasWorkspace() {
         current.originals.map(({ frame }) => frame),
         raw,
         textOnly ? bubbles : [],
-        { zoom: camera.zoom, disabled: Boolean(sample.metaKey) },
+        {
+          zoom: camera.zoom,
+          disabled: Boolean(sample.metaKey),
+          others: textOnly
+            ? page.layers
+                .filter(
+                  (l) =>
+                    isTextLayer(l) && !current.originals.some(({ element }) => element === l.id),
+                )
+                .flatMap((l) => controlFrame(l, layerFrames) ?? [])
+            : [],
+        },
       )
       setSnapGuide(snap.guide)
       updateTransform(translateFrames(current.originals, snap.delta))

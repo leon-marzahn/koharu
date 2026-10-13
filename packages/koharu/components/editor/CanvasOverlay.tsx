@@ -174,10 +174,11 @@ function CenterMark({ frame, camera }: { frame: Frame; camera: Camera }) {
   )
 }
 
-// Overlay-only faint line(s) through the bubble center while a drag is snapped.
+// Overlay-only faint line(s) along the snapped edge or center while a drag is snapped.
 function SnapGuideLines({ guide, camera }: { guide: SnapGuide; camera: Camera }) {
-  const { left, top, width, height } = cssFrame({ ...guide.bubble, angle_degrees: 0 }, camera)
   const line = 'pointer-events-none absolute bg-[var(--canvas-selection)] opacity-40'
+  const box = guide.bubble && cssFrame({ ...guide.bubble, angle_degrees: 0 }, camera)
+  const dpr = window.devicePixelRatio
   return (
     <>
       {guide.x !== undefined && (
@@ -185,7 +186,12 @@ function SnapGuideLines({ guide, camera }: { guide: SnapGuide; camera: Camera })
           data-testid='snap-guide-x'
           aria-hidden='true'
           className={line}
-          style={{ left: left + width / 2, top, width: 1, height }}
+          style={{
+            left: (guide.x * camera.zoom + camera.translation[0]) / dpr,
+            top: box?.top ?? 0,
+            width: 1,
+            height: box?.height ?? '100%',
+          }}
         />
       )}
       {guide.y !== undefined && (
@@ -193,7 +199,12 @@ function SnapGuideLines({ guide, camera }: { guide: SnapGuide; camera: Camera })
           data-testid='snap-guide-y'
           aria-hidden='true'
           className={line}
-          style={{ left, top: top + height / 2, width, height: 1 }}
+          style={{
+            left: box?.left ?? 0,
+            top: (guide.y * camera.zoom + camera.translation[1]) / dpr,
+            width: box?.width ?? '100%',
+            height: 1,
+          }}
         />
       )}
     </>

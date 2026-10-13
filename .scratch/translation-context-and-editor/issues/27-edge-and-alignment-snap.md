@@ -13,11 +13,11 @@ Out of scope: align/distribute buttons for a multi-selection, a settings toggle,
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Dragging a box near its bubble's edge snaps it flush, with a guide
-- [ ] Boxes line up with other boxes' edges and centres, horizontally and vertically, with guides
-- [ ] Threshold is 8 screen px at any zoom; Cmd disables everything
-- [ ] The centre snap from ticket 17 still works and its tests still pass
-- [ ] Group moves and boxes outside bubbles behave as described
-- [ ] Unit tests for the snap function; component test through the real drag path (real kind `dev.koharu.region.bubble`)
+- [x] Dragging a box near its bubble's edge snaps it flush, with a guide
+- [x] Boxes line up with other boxes' edges and centres, horizontally and vertically, with guides
+- [x] Threshold is 8 screen px at any zoom; Cmd disables everything
+- [x] The centre snap from ticket 17 still works and its tests still pass
+- [x] Group moves and boxes outside bubbles behave as described
+- [x] Unit tests for the snap function; component test through the real drag path (real kind `dev.koharu.region.bubble`)

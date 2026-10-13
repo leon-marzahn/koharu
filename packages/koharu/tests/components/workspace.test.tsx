@@ -401,11 +401,70 @@ describe('canvas interaction adapter', () => {
     fireEvent.pointerUp(surface, { pointerId: 21, clientX: 300, clientY: 300 })
     expect(useKoharuStore.getState().selectedLayers).toEqual([])
     fireEvent.pointerDown(surface, { button: 0, pointerId: 22, clientX: 50, clientY: 80 })
-    fireEvent.pointerMove(surface, { pointerId: 22, clientX: 70, clientY: 80 })
-    fireEvent.pointerUp(surface, { pointerId: 22, clientX: 70, clientY: 80 })
+    fireEvent.pointerMove(surface, { pointerId: 22, clientX: 90, clientY: 80 })
+    fireEvent.pointerUp(surface, { pointerId: 22, clientX: 90, clientY: 80 })
     await waitFor(() => expect(commit).toHaveBeenCalledTimes(2))
     expect(canvas.updateTransform).toHaveBeenLastCalledWith([
-      { element: 'element', frame: expect.objectContaining({ x: 55, y: 50 }) },
+      { element: 'element', frame: expect.objectContaining({ x: 75, y: 50 }) },
+    ])
+  })
+
+  it('snaps a dragged box flush to the bubble edge and to another box', async () => {
+    installProject()
+    const text = (id: string) => ({
+      type: 'text',
+      id,
+      parent: 'page',
+      geometry: layer.geometry,
+      angle_degrees: 0,
+      visibility: { visible: true, opacity: 1 },
+      content: {
+        id: `${id}-content`,
+        source: { text: 'Source', language: 'en' },
+        translation: { text: 'Rendered', language: null },
+        role: null,
+        source_region: null,
+      },
+      typography: null,
+      layout: 'paragraph',
+      automatic_region: null,
+    })
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [text('element'), text('other')],
+      regions: [
+        {
+          id: 'bubble',
+          parent: 'page',
+          geometry: {
+            points: [
+              { x: 20, y: 30 },
+              { x: 100, y: 30 },
+              { x: 100, y: 90 },
+              { x: 20, y: 90 },
+            ],
+          },
+          kind: 'dev.koharu.region.bubble',
+          label: null,
+        },
+      ],
+    }))
+    useKoharuStore.setState({
+      layerFrames: {
+        element: { x: 30, y: 40, width: 50, height: 20, angle_degrees: 0 },
+        other: { x: 300, y: 200, width: 10, height: 10, angle_degrees: 0 },
+      },
+    })
+    vi.spyOn(commands, 'commitTransform').mockResolvedValue(2)
+    const surface = renderWorkspace()
+
+    // Right edge 80 + 17 = 97 snaps flush to the bubble's 100; y stays 40 (nothing within 8).
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 40, clientX: 50, clientY: 70 })
+    fireEvent.pointerMove(surface, { pointerId: 40, clientX: 67, clientY: 70 })
+    fireEvent.pointerUp(surface, { pointerId: 40, clientX: 67, clientY: 70 })
+    await waitFor(() => expect(commands.commitTransform).toHaveBeenCalledOnce())
+    expect(canvas.updateTransform).toHaveBeenLastCalledWith([
+      { element: 'element', frame: expect.objectContaining({ x: 50, y: 40 }) },
     ])
   })
 
