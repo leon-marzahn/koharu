@@ -82,7 +82,8 @@ export function InferenceControl({
         disabled={disabled || unavailable || Boolean(running)}
         onClick={() => onRun(scope, translateOnly)}
       >
-        {t('inference.translateOnly')}
+        <Play className='size-3' />
+        <span>{t('inference.translateOnly')}</span>
       </Button>
       <Button
         type='button'
@@ -92,7 +93,8 @@ export function InferenceControl({
         disabled={disabled || unavailable || Boolean(running)}
         onClick={() => onRun(scope, inpaintOnly)}
       >
-        {t('inference.inpaintOnly')}
+        <Play className='size-3' />
+        <span>{t('inference.inpaintOnly')}</span>
       </Button>
 
       <Button
