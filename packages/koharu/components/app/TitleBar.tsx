@@ -62,7 +62,10 @@ export function TitleBar() {
   const run = (scope: Scope, operation: Operation = { operation: 'full' }) =>
     void call(commands.process, scope, operation).catch(() => undefined)
   // Only ever run on click: stale pages are marked, never processed automatically.
-  const staleIds = pages.filter((page) => page.stale).map((page) => page.id)
+  // Done pages stay out of the count because bulk runs would skip them anyway.
+  const staleIds = pages
+    .filter((page) => page.stale && page.status !== 'done')
+    .map((page) => page.id)
   // Whole-project (or stale-only) runs leave Done pages alone and say how many were skipped.
   const runProject = (only?: string[]) => runBulk(pages, (scope) => run(scope), t, only)
 

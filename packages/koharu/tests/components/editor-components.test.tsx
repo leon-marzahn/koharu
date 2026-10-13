@@ -609,7 +609,8 @@ describe('greenfield editor', () => {
       render(<TitleBar />)
 
       await user.click(screen.getByRole('menuitem', { name: 'Process' }))
-      await user.click(await screen.findByRole('menuitem', { name: 'Process 2 Stale Pages' }))
+      // p2 is stale but Done, so it is neither counted nor run.
+      await user.click(await screen.findByRole('menuitem', { name: 'Process 1 Stale Pages' }))
       expect(process).toHaveBeenLastCalledWith(
         { scope: 'pages', value: ['p3'] },
         { operation: 'full' },
