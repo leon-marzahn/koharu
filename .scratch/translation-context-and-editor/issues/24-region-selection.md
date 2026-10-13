@@ -6,9 +6,9 @@
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Selecting a region, then moving it, keeps it selected (test)
-- [ ] Selecting a region, then resizing it, keeps it selected (test)
-- [ ] Clicking empty canvas, Escape (not painting) and selecting a text layer deselect the region (tests)
-- [ ] Escape still cancels paint mode first
+- [x] Selecting a region, then moving it, keeps it selected (test)
+- [x] Selecting a region, then resizing it, keeps it selected (test)
+- [x] Clicking empty canvas, Escape (not painting) and selecting a text layer deselect the region (tests)
+- [x] Escape still cancels paint mode first

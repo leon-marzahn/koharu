@@ -74,10 +74,12 @@ export function RegionsOverlay({
   camera: Camera
   container: RefObject<HTMLDivElement | null>
 }) {
-  const [selected, setSelected] = useState<EntityId | null>(null)
+  const selected = useKoharuStore((state) => state.selectedRegion)
+  const setSelected = useKoharuStore((state) => state.selectRegion)
   const [preview, setPreview] = useState<Frame | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   const region = regions.find((r) => r.id === selected)
+  const present = Boolean(region)
   const { t } = useTranslation()
   const drawing = useKoharuStore((state) => state.drawRegion)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
@@ -141,8 +143,7 @@ export function RegionsOverlay({
   useEffect(() => {
     if (!painted) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPainting(null)
-      else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault()
         undoStroke()
       }
@@ -162,6 +163,8 @@ export function RegionsOverlay({
   useEffect(() => {
     if (!selected) return
     const onKey = (event: KeyboardEvent) => {
+      // Escape cancels paint mode first; only a second press deselects.
+      if (event.key === 'Escape') return painted ? setPainting(null) : setSelected(null)
       const target = event.target
       if (
         target instanceof HTMLInputElement ||
@@ -170,13 +173,15 @@ export function RegionsOverlay({
       )
         return
       if (event.key !== 'Delete' && event.key !== 'Backspace') return
+      // The id lives in the store, so it can outlive a page switch: delete only a region shown here.
+      if (!present) return
       event.preventDefault()
       remove(selected)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected])
+  }, [selected, painted, present])
 
   // Draw a user region, then OCR, translate and clean only that region.
   const finishSketch = (from: Point, to: Point) => {

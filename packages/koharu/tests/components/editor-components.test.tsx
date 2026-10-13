@@ -1111,14 +1111,96 @@ describe('greenfield editor', () => {
         onTransformEnd: vi.fn(),
       }
       useKoharuStore.setState({ showRegions: true })
-      render(
+      const ui = (next: typeof props) => (
         <TooltipProvider>
           <ToolBar />
-          <CanvasOverlay {...props} />
-        </TooltipProvider>,
+          <CanvasOverlay {...next} />
+        </TooltipProvider>
       )
+      const view = render(ui(props))
+      // The refreshed page arrives with the same region id; `remount` also drops the overlay
+      // the way a canvas that leaves 'ready' does.
+      const moved = (x: number) => ({
+        ...props,
+        page: {
+          ...props.page,
+          regions: [
+            {
+              ...region,
+              geometry: { points: region.geometry.points.map((p) => ({ ...p, x: p.x + x })) },
+            },
+          ],
+        },
+      })
+      regionView = {
+        refresh: (x: number) =>
+          view.rerender(
+            <QueryClientProvider client={queryClient}>{ui(moved(x))}</QueryClientProvider>,
+          ),
+        remount: (x: number) => {
+          view.unmount()
+          render(ui(moved(x)))
+        },
+      }
       return page
     }
+    let regionView: { refresh: (x: number) => void; remount: (x: number) => void }
+    const controlsShown = () => {
+      expect(document.querySelector('[data-resize-handle="e"]')).not.toBeNull()
+      expect(screen.getByRole('button', { name: 'Delete region', hidden: true })).toBeVisible()
+    }
+    const noControls = () =>
+      expect(screen.queryByRole('button', { name: 'Delete region', hidden: true })).toBeNull()
+
+    it('keeps the region selected after it is moved and the page refreshes', async () => {
+      setup()
+      vi.spyOn(commands, 'setRegionGeometry').mockResolvedValue(null)
+      const box = screen.getByTestId('region-region-1')
+      fireEvent.pointerDown(box, { button: 0, pointerId: 1, clientX: 20, clientY: 20 })
+      fireEvent.pointerMove(box, { pointerId: 1, clientX: 40, clientY: 20 })
+      fireEvent.pointerUp(box, { pointerId: 1, clientX: 40, clientY: 20 })
+      regionView.remount(20)
+      controlsShown()
+    })
+
+    it('keeps the region selected after it is resized and the page refreshes', async () => {
+      setup()
+      vi.spyOn(commands, 'setRegionGeometry').mockResolvedValue(null)
+      fireEvent.pointerDown(screen.getByTestId('region-region-1'), { button: 0, pointerId: 1 })
+      const handle = document.querySelector('[data-resize-handle="e"]') as HTMLElement
+      fireEvent.pointerDown(handle, { button: 0, pointerId: 2, clientX: 60, clientY: 25 })
+      fireEvent.pointerMove(handle, { pointerId: 2, clientX: 90, clientY: 25 })
+      fireEvent.pointerUp(handle, { pointerId: 2, clientX: 90, clientY: 25 })
+      regionView.refresh(30)
+      controlsShown()
+      regionView.remount(30)
+      controlsShown()
+    })
+
+    it('deselects with Escape, but Escape first cancels paint mode', async () => {
+      const user = userEvent.setup()
+      setup()
+      await user.click(screen.getByTestId('region-region-1'))
+      await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(screen.queryByTestId('region-paint-surface')).not.toBeInTheDocument()
+      controlsShown()
+      fireEvent.keyDown(window, { key: 'Escape' })
+      noControls()
+    })
+
+    it('deselects the region when a text layer or empty canvas is selected', async () => {
+      const user = userEvent.setup()
+      setup()
+      await user.click(screen.getByTestId('region-region-1'))
+      act(() => useKoharuStore.getState().selectLayers([]))
+      controlsShown()
+      act(() => useKoharuStore.getState().selectLayers(['layer-1']))
+      noControls()
+      await user.click(screen.getByTestId('region-region-1'))
+      act(() => useKoharuStore.getState().selectRegion(null))
+      noControls()
+    })
 
     it('deletes the selected region with the Delete key and the delete control', async () => {
       const user = userEvent.setup()

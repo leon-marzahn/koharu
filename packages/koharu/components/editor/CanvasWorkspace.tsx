@@ -722,7 +722,10 @@ export function CanvasWorkspace() {
               const target = hitTestLayers(page.layers, point, layerFrames)
               const additive = event.shiftKey || event.ctrlKey || event.metaKey
               if (!target) {
-                if (!additive) selectLayers([])
+                if (!additive) {
+                  selectLayers([])
+                  useKoharuStore.getState().selectRegion(null)
+                }
                 return
               }
               const next = additive

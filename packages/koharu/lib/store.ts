@@ -61,6 +61,8 @@ interface KoharuStore {
   fitCanvasRequest: number
   layerFrames: Record<EntityId, Frame>
   selectedLayers: EntityId[]
+  // Lives here, not in RegionsOverlay, so it survives the overlay remounting on a refresh.
+  selectedRegion: EntityId | null
   selectedPages: EntityId[]
   boxClipboard: { page: EntityId; boxes: CopiedBox[] } | null
   styleClipboard: Typography | null
@@ -77,6 +79,7 @@ interface KoharuStore {
   setProcessingScope: (scope: PipelineScope) => void
   setSettingsOpen: (open: boolean) => void
   selectLayers: (layers: EntityId[]) => void
+  selectRegion: (region: EntityId | null) => void
   setTool: (tool: CanvasTool) => void
   toggleRegions: () => void
   toggleDrawRegion: () => void
@@ -113,6 +116,7 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   fitCanvasRequest: 0,
   layerFrames: {},
   selectedLayers: [],
+  selectedRegion: null,
   selectedPages: [],
   boxClipboard: null,
   styleClipboard: null,
@@ -128,7 +132,13 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   showInspector: (inspector) => set({ inspector }),
   setProcessingScope: (processingScope) => set({ processingScope }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
-  selectLayers: (selectedLayers) => set({ selectedLayers: [...new Set(selectedLayers)] }),
+  // Selecting a layer drops the region selection; clearing layers keeps it (a region press clears layers).
+  selectLayers: (selectedLayers) =>
+    set((state) => ({
+      selectedLayers: [...new Set(selectedLayers)],
+      selectedRegion: selectedLayers.length ? null : state.selectedRegion,
+    })),
+  selectRegion: (selectedRegion) => set({ selectedRegion }),
   setTool: (tool) => set({ tool }),
   toggleRegions: () => set((state) => ({ showRegions: !state.showRegions, drawRegion: false })),
   toggleDrawRegion: () => set((state) => ({ drawRegion: !state.drawRegion })),
