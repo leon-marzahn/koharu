@@ -555,6 +555,7 @@
     "regions": "區域",
     "drawRegion": "繪製區域",
     "deleteRegion": "刪除區域",
+    "reocrRegion": "重新辨識區域文字",
     "brushSize": "筆刷大小",
     "brushSizeInput": "筆刷大小",
     "brushSizePixels": "筆刷大小：{{size}} 像素",

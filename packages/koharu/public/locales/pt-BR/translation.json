@@ -555,6 +555,7 @@
     "regions": "Regiões",
     "drawRegion": "Desenhar região",
     "deleteRegion": "Excluir região",
+    "reocrRegion": "Executar OCR novamente na região",
     "brushSize": "Tamanho do pincel",
     "brushSizeInput": "Tamanho do pincel",
     "brushSizePixels": "Tamanho do pincel: {{size}} pixels",

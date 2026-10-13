@@ -61,6 +61,12 @@ export const commands = {
 	deleteRegions: (regions: EntityId[]) => __TAURI_INVOKE<null>("delete_regions", { regions }),
 	/**  Returns the new region so the caller can scope OCR and translation to it. */
 	drawRegion: (page: EntityId, from: Point, to: Point) => __TAURI_INVOKE<EntityId>("draw_region", { page, from, to }),
+	/**
+	 *  OCR + translate one region, then (optionally) clean it. Entity scope keeps neighbours
+	 *  untouched but cannot include inpainting, so cleaning is a second job that follows with a
+	 *  rectangle mask over the region.
+	 */
+	processRegion: (region: EntityId, clean: boolean) => __TAURI_INVOKE<null>("process_region", { region, clean }),
 	setVisibility: (layers: EntityId[], visible: boolean | null, opacity: number | null) => __TAURI_INVOKE<null>("set_visibility", { layers, visible, opacity: opacity==null?opacity:opacity }),
 	deleteLayers: (layers: EntityId[]) => __TAURI_INVOKE<null>("delete_layers", { layers }),
 	moveLayer: (layer: EntityId, parent: EntityId, index: number) => __TAURI_INVOKE<Page>("move_layer", { layer, parent, index }).then((v) => (({...v,layers:v.layers.map(i=>i),regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),

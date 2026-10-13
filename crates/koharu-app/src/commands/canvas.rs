@@ -4,7 +4,7 @@ use anyhow::{Context as _, anyhow, bail};
 use image::{GrayImage, ImageEncoder as _, codecs::png::PngEncoder};
 use koharu_desktop::{CanvasState, Desktop, Frame, TransformFrame};
 use koharu_rasterizer::ResourceId;
-use koharu_scene::{EntityId, Revision};
+use koharu_scene::{EntityId, Geometry, Revision};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -402,6 +402,150 @@ pub(crate) async fn commit_inpaint(
         )
         .await?,
     ))
+}
+
+/// OCR + translate one region, then (optionally) clean it. Entity scope keeps neighbours
+/// untouched but cannot include inpainting, so cleaning is a second job that follows with a
+/// rectangle mask over the region.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn process_region(
+    region: EntityId,
+    clean: bool,
+    handle: AppHandle<CefRuntime>,
+) -> Result<(), Error> {
+    let (page, width, height, rect) = {
+        let current = handle.state::<CurrentProject>();
+        let project = current.project.lock().await;
+        let project = project.as_ref().context("no project is open")?;
+        let snapshot = project.snapshot();
+        let page = project
+            .active_page()
+            .context("the project has no active page")?;
+        let size = snapshot.page(page)?.page()?;
+        let geometry = snapshot
+            .component::<Geometry>(region)?
+            .context("the region has no geometry")?;
+        (
+            page,
+            size.width.round() as u32,
+            size.height.round() as u32,
+            geometry
+                .points
+                .iter()
+                .map(|p| (p.x, p.y))
+                .collect::<Vec<_>>(),
+        )
+    };
+    processing::process(
+        handle.clone(),
+        koharu_pipeline::Scope::Entities(vec![region]),
+        koharu_pipeline::Operation::Stages {
+            stages: vec![
+                koharu_pipeline::Stage::Ocr,
+                koharu_pipeline::Stage::Translation,
+            ],
+        },
+        handle.state::<CurrentProject>(),
+        handle.state::<Processing>(),
+        handle.state::<JobChannel>(),
+    )
+    .await?;
+    if !clean {
+        return Ok(());
+    }
+    // ponytail: polling until the OCR job ends; replace with a completion signal if jobs ever run concurrently.
+    while !handle.state::<Processing>().stops.lock().is_empty() {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let (png, bounds) = tokio_rayon::spawn(move || rect_mask(width, height, &rect)).await?;
+    *handle.state::<Processing>().inpainting_mask.lock() = Some(koharu_pipeline::InpaintingMask {
+        page,
+        png: Arc::from(png),
+    });
+    processing::process(
+        handle.clone(),
+        koharu_pipeline::Scope::Region { page, bounds },
+        koharu_pipeline::Operation::Only {
+            stage: koharu_pipeline::Stage::Inpainting,
+        },
+        handle.state::<CurrentProject>(),
+        handle.state::<Processing>(),
+        handle.state::<JobChannel>(),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Filled bounding box of `points`, padded by 2 px and clamped to the page.
+fn rect_mask(
+    width: u32,
+    height: u32,
+    points: &[(f64, f64)],
+) -> anyhow::Result<(Vec<u8>, koharu_pipeline::Bounds)> {
+    const PAD: f64 = 2.0;
+    if width == 0 || height == 0 || points.is_empty() {
+        bail!("page and region must be non-empty");
+    }
+    let fold = |pick: fn(f64, f64) -> f64, i: usize, init: f64| {
+        points
+            .iter()
+            .map(|p| if i == 0 { p.0 } else { p.1 })
+            .fold(init, pick)
+    };
+    let left = (fold(f64::min, 0, f64::MAX) - PAD).floor().max(0.0) as u32;
+    let top = (fold(f64::min, 1, f64::MAX) - PAD).floor().max(0.0) as u32;
+    let right = ((fold(f64::max, 0, f64::MIN) + PAD).ceil().max(0.0) as u32).min(width);
+    let bottom = ((fold(f64::max, 1, f64::MIN) + PAD).ceil().max(0.0) as u32).min(height);
+    if left >= right || top >= bottom {
+        bail!("the region is outside the page");
+    }
+    let mut image = GrayImage::new(width, height);
+    for y in top..bottom {
+        for x in left..right {
+            image.put_pixel(x, y, image::Luma([255]));
+        }
+    }
+    let mut png = Vec::new();
+    PngEncoder::new(&mut png).write_image(
+        image.as_raw(),
+        width,
+        height,
+        image::ExtendedColorType::L8,
+    )?;
+    Ok((
+        png,
+        koharu_pipeline::Bounds {
+            x: f64::from(left),
+            y: f64::from(top),
+            width: f64::from(right - left),
+            height: f64::from(bottom - top),
+        },
+    ))
+}
+
+#[cfg(test)]
+mod region_mask_tests {
+    use super::rect_mask;
+
+    #[test]
+    fn rect_mask_covers_the_padded_box_and_clamps_to_the_page() {
+        let (png, bounds) =
+            rect_mask(100, 50, &[(10.0, 10.0), (30.0, 20.0), (30.0, 10.0)]).unwrap();
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (8.0, 8.0, 24.0, 14.0)
+        );
+        let mask = image::load_from_memory(&png).unwrap().to_luma8();
+        assert_eq!(mask.get_pixel(9, 9).0[0], 255);
+        assert_eq!(mask.get_pixel(40, 40).0[0], 0);
+        let (_, edge) = rect_mask(100, 50, &[(-5.0, -5.0), (500.0, 500.0)]).unwrap();
+        assert_eq!(
+            (edge.x, edge.y, edge.width, edge.height),
+            (0.0, 0.0, 100.0, 50.0)
+        );
+        assert!(rect_mask(100, 50, &[(200.0, 10.0), (210.0, 20.0)]).is_err());
+    }
 }
 
 fn ensure_revision(actual: Revision, expected: Revision) -> anyhow::Result<()> {

@@ -555,6 +555,7 @@
     "regions": "Bölgeler",
     "drawRegion": "Bölge çiz",
     "deleteRegion": "Bölgeyi sil",
+    "reocrRegion": "Bölgede OCR’yi yeniden çalıştır",
     "brushSize": "Fırça boyutu",
     "brushSizeInput": "Fırça boyutu",
     "brushSizePixels": "Fırça boyutu: {{size}} piksel",

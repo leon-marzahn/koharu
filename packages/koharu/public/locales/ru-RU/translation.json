@@ -555,6 +555,7 @@
     "regions": "Области",
     "drawRegion": "Нарисовать область",
     "deleteRegion": "Удалить область",
+    "reocrRegion": "Повторить OCR для области",
     "brushSize": "Размер кисти",
     "brushSizeInput": "Размер кисти",
     "brushSizePixels": "Размер кисти: {{size}} пикс.",

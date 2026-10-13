@@ -1,6 +1,6 @@
 'use client'
 
-import { Trash2 } from 'lucide-react'
+import { ScanText, Trash2 } from 'lucide-react'
 import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -98,18 +98,13 @@ export function RegionsOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected])
 
-  // Draw a user region, then OCR + translate only that region (entity scope follows its
-  // RecognizedFrom/FitsTo relations, so neighbouring regions and text are never reprocessed).
+  // Draw a user region, then OCR, translate and clean only that region.
   const finishSketch = (from: Point, to: Point) => {
     if (Math.abs(from.x - to.x) < 2 || Math.abs(from.y - to.y) < 2) return
     void call(commands.drawRegion, page, from, to)
       .then(async (id) => {
         await refresh(projectKey, pagesKey, pageKey)
-        await call(
-          commands.process,
-          { scope: 'entities', value: [id] },
-          { operation: 'stages', stages: ['ocr', 'translation'] },
-        )
+        await call(commands.processRegion, id, true)
       })
       .catch(() => undefined)
   }
@@ -175,21 +170,40 @@ export function RegionsOverlay({
         )
       })}
       {region && !drawing && (
-        <Button
-          type='button'
-          variant='secondary'
-          size='icon'
-          aria-label={t('tools.deleteRegion')}
-          className='pointer-events-auto absolute size-6 -translate-y-full'
+        // The wrapper carries the offset: Button's own active:translate-y-px would override it
+        // while pressed and make the button jump away from the cursor.
+        <div
+          className='pointer-events-none absolute flex -translate-y-full gap-1'
           style={{
             left: cssFrame(preview ?? regionFrame(region), camera).left,
             top: cssFrame(preview ?? regionFrame(region), camera).top,
           }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => remove(region.id)}
         >
-          <Trash2 className='size-3.5' />
-        </Button>
+          <Button
+            type='button'
+            variant='secondary'
+            size='icon'
+            aria-label={t('tools.reocrRegion')}
+            className='pointer-events-auto size-6'
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() =>
+              void call(commands.processRegion, region.id, false).catch(() => undefined)
+            }
+          >
+            <ScanText className='size-3.5' />
+          </Button>
+          <Button
+            type='button'
+            variant='secondary'
+            size='icon'
+            aria-label={t('tools.deleteRegion')}
+            className='pointer-events-auto size-6'
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => remove(region.id)}
+          >
+            <Trash2 className='size-3.5' />
+          </Button>
+        </div>
       )}
       {drawing && (
         <div

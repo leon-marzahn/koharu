@@ -555,6 +555,7 @@
     "regions": "Regions",
     "drawRegion": "Draw region",
     "deleteRegion": "Delete region",
+    "reocrRegion": "Re-run OCR on region",
     "brushSize": "Brush size",
     "brushSizeInput": "Brush size",
     "brushSizePixels": "Brush size: {{size}} pixels",

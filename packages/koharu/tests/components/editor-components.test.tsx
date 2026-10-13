@@ -1043,11 +1043,11 @@ describe('greenfield editor', () => {
       expect(remove).toHaveBeenCalledTimes(2)
     })
 
-    it('draws a region then runs OCR and translation on just that region', async () => {
+    it('draws a region then OCRs, translates and cleans just that region', async () => {
       const user = userEvent.setup()
       const page = setup()
       const draw = vi.spyOn(commands, 'drawRegion').mockResolvedValue('region-new')
-      const process = vi.spyOn(commands, 'process').mockResolvedValue('job-1')
+      const process = vi.spyOn(commands, 'processRegion').mockResolvedValue(null)
       await user.click(screen.getByRole('button', { name: 'Draw region' }))
       const surface = screen.getByTestId('region-draw-surface')
       fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 5, clientY: 6 })
@@ -1055,10 +1055,25 @@ describe('greenfield editor', () => {
       fireEvent.pointerUp(surface, { pointerId: 1, clientX: 25, clientY: 36 })
       await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(1))
       expect(draw).toHaveBeenCalledWith(page.id, { x: 5, y: 6 }, { x: 25, y: 36 })
-      expect(process).toHaveBeenCalledWith(
-        { scope: 'entities', value: ['region-new'] },
-        { operation: 'stages', stages: ['ocr', 'translation'] },
-      )
+      expect(process).toHaveBeenCalledWith('region-new', true)
+    })
+
+    it('re-runs OCR and translation (without cleaning) from the region controls', async () => {
+      const user = userEvent.setup()
+      setup()
+      const process = vi.spyOn(commands, 'processRegion').mockResolvedValue(null)
+      await user.click(screen.getByTestId('region-region-1'))
+      await user.click(screen.getByRole('button', { name: 'Re-run OCR on region', hidden: true }))
+      expect(process).toHaveBeenCalledWith('region-1', false)
+    })
+
+    it('offsets the controls on a wrapper so pressing a button cannot move it', async () => {
+      const user = userEvent.setup()
+      setup()
+      await user.click(screen.getByTestId('region-region-1'))
+      const button = screen.getByRole('button', { name: 'Delete region', hidden: true })
+      expect(button.className).not.toContain('-translate-y-full')
+      expect(button.parentElement?.className).toContain('-translate-y-full')
     })
 
     it('ignores a draw gesture that did not move', async () => {
