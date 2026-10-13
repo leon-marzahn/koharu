@@ -985,6 +985,40 @@ describe('greenfield editor', () => {
     expect(screen.getByTestId('lock-element')).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('puts the box lock beside the eye, the description lock on the title row, and Translate before the note', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const page = queryClient.getQueryData(pageKey) as Page
+    render(<Inspector />)
+
+    // Box lock: the row's own button, directly before the eye.
+    const boxLock = screen.getByTestId('lock-element')
+    const eye = boxLock.nextElementSibling as HTMLElement
+    expect(eye).toHaveAttribute('aria-label', expect.stringMatching(/^(Hide|Show) /))
+    // Description lock: in the same header row as its title.
+    const title = screen.getAllByText('Scene description', { exact: false })[0]!
+    expect(title.parentElement).toContainElement(screen.getByTestId(`lock-${page.id}`))
+    // Reading order: Translate, then the note.
+    const translate = screen.getByTestId('translate-box-element')
+    const note = screen.getByTestId('translate-note-element')
+    expect(translate.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(note).toHaveTextContent('Translate with note…')
+
+    // A locked box cannot open the note either.
+    vi.spyOn(commands, 'setLocked').mockResolvedValue(null)
+    vi.spyOn(commands, 'getPage').mockResolvedValue({
+      ...page,
+      layers: page.layers.map((layer) =>
+        layer.type === 'text' ? { ...layer, locked: true } : layer,
+      ),
+    })
+    await user.click(boxLock)
+    await waitFor(() => expect(screen.getByTestId('translate-note-element')).toBeDisabled())
+    await user.click(screen.getByTestId('translate-note-element'))
+    expect(screen.queryByTestId('translate-note-input-element')).not.toBeInTheDocument()
+    expect(screen.getByTestId('translate-note-element').className).toContain('disabled:opacity-50')
+  })
+
   const withDescriptionModel = () => {
     const translation = preferences.pipeline.translation!
     useKoharuStore.setState({

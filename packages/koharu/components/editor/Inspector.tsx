@@ -650,14 +650,18 @@ function LayersInspector() {
       </header>
 
       <div className='shrink-0 border-b border-border/80 px-2 py-1.5'>
-        <InspectorField label={t('inspector.sceneDescription')}>
-          <LockToggle
-            id={page.id}
-            locked={page.description_locked}
-            lockLabel={t('inspector.lockDescription')}
-            unlockLabel={t('inspector.unlockDescription')}
-            onChanged={() => refresh(projectKey, pageKey)}
-          />
+        <InspectorField
+          label={t('inspector.sceneDescription')}
+          action={
+            <LockToggle
+              id={page.id}
+              locked={page.description_locked}
+              lockLabel={t('inspector.lockDescription')}
+              unlockLabel={t('inspector.unlockDescription')}
+              onChanged={() => refresh(projectKey, pageKey)}
+            />
+          }
+        >
           <CommitTextarea
             key={page.id}
             aria-label={t('inspector.sceneDescription')}
@@ -825,6 +829,15 @@ function LayerRow({
             <span className='w-7 shrink-0 text-right text-[9px] text-muted-foreground tabular-nums'>
               {Math.round(layer.visibility.opacity * 100)}%
             </span>
+          )}
+          {layer.type === 'text' && (
+            <LockToggle
+              id={layer.id}
+              locked={layer.locked}
+              lockLabel={t('inspector.lockTranslation')}
+              unlockLabel={t('inspector.unlockTranslation')}
+              onChanged={() => refresh(projectKey, pageKey)}
+            />
           )}
           {locked ? (
             <Tooltip>
@@ -1000,15 +1013,6 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
                   .catch(() => undefined)
               }
             />
-            <div className='flex items-center justify-end gap-0.5'>
-              <LockToggle
-                id={layer.id}
-                locked={layer.locked}
-                lockLabel={t('inspector.lockTranslation')}
-                unlockLabel={t('inspector.unlockTranslation')}
-                onChanged={() => refresh(projectKey, pageKey)}
-              />
-            </div>
             <TranslateBox id={layer.id} locked={layer.locked} />
           </InspectorField>
         </>
@@ -1036,6 +1040,18 @@ function TranslateBox({ id, locked }: { id: string; locked: boolean }) {
   return (
     <>
       <div className='flex justify-end gap-0.5'>
+        <Button
+          type='button'
+          variant='ghost'
+          size='xs'
+          disabled={locked}
+          title={locked ? t('inspector.unlockToTranslate') : undefined}
+          data-testid={`translate-box-${id}`}
+          className='h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
+          onClick={() => void run('')}
+        >
+          {t('inference.translateOnly')}
+        </Button>
         <Popover
           open={open}
           onOpenChange={(next) => {
@@ -1047,7 +1063,7 @@ function TranslateBox({ id, locked }: { id: string; locked: boolean }) {
             disabled={locked}
             title={locked ? t('inspector.unlockToTranslate') : undefined}
             data-testid={`translate-note-${id}`}
-            className='h-5 rounded-md px-1.5 text-[9px] text-muted-foreground hover:text-foreground'
+            className='h-5 rounded-md px-1.5 text-[9px] text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50'
           >
             {t('inspector.translateWithNote')}
           </PopoverTrigger>
@@ -1071,18 +1087,6 @@ function TranslateBox({ id, locked }: { id: string; locked: boolean }) {
             </Button>
           </PopoverContent>
         </Popover>
-        <Button
-          type='button'
-          variant='ghost'
-          size='xs'
-          disabled={locked}
-          title={locked ? t('inspector.unlockToTranslate') : undefined}
-          data-testid={`translate-box-${id}`}
-          className='h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
-          onClick={() => void run('')}
-        >
-          {t('inference.translateOnly')}
-        </Button>
       </div>
       {explanation && (
         <div
@@ -1123,23 +1127,21 @@ function LockToggle({
 }) {
   const label = locked ? unlockLabel : lockLabel
   return (
-    <Button
+    <button
       type='button'
-      variant='ghost'
-      size='xs'
       data-testid={`lock-${id}`}
       aria-label={label}
       aria-pressed={locked}
       title={label}
-      className={`h-5 w-5 justify-self-end rounded-md p-0 ${locked ? 'text-primary' : 'text-muted-foreground'}`}
+      className={`grid size-6 shrink-0 place-items-center rounded-md hover:bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 ${locked ? 'text-primary' : 'text-muted-foreground'}`}
       onClick={() =>
         void call(commands.setLocked, id, !locked)
           .then(onChanged)
           .catch(() => undefined)
       }
     >
-      {locked ? <Lock className='size-3' /> : <LockOpen className='size-3' />}
-    </Button>
+      {locked ? <Lock className='size-3.5' /> : <LockOpen className='size-3.5' />}
+    </button>
   )
 }
 
@@ -1188,12 +1190,23 @@ function DescribePage({ id, locked }: { id: string; locked: boolean }) {
   )
 }
 
-function InspectorField({ label, children }: { label: string; children: React.ReactNode }) {
+function InspectorField({
+  label,
+  action,
+  children,
+}: {
+  label: string
+  action?: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <div className='grid min-w-0 gap-0.5'>
-      <span className='text-[8px] font-medium tracking-[0.06em] text-muted-foreground uppercase'>
-        {label}
-      </span>
+      <div className='flex items-center justify-between gap-1'>
+        <span className='text-[8px] font-medium tracking-[0.06em] text-muted-foreground uppercase'>
+          {label}
+        </span>
+        {action && <span className='-my-1'>{action}</span>}
+      </div>
       {children}
     </div>
   )
