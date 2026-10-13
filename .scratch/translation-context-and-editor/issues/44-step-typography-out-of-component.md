@@ -5,7 +5,7 @@
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `stepTypography` lives outside component files; every importer updated
-- [ ] `bun run test`, `bun run lint` and `bunx tsc --noEmit` in `packages/koharu` pass
+- [x] `stepTypography` lives outside component files; every importer updated
+- [x] `bun run test`, `bun run lint` and `bunx tsc --noEmit` in `packages/koharu` pass
