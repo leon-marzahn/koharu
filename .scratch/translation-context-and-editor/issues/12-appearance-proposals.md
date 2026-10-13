@@ -4,9 +4,9 @@
 
 **Blocked by:** 07 Proposals: new entries and review, 11 Scene description stage
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Unmatched characters produce a pending character with appearance
-- [ ] Description and translation proposals for the same new character merge into one pending entry
-- [ ] Appearance is shown and editable during review
-- [ ] Stage tests cover creation and merging
+- [x] Unmatched characters produce a pending character with appearance
+- [x] Description and translation proposals for the same new character merge into one pending entry
+- [x] Appearance is shown and editable during review
+- [x] Stage tests cover creation and merging

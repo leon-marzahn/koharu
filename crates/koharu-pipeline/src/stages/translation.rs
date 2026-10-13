@@ -185,9 +185,23 @@ fn merge_proposals(scene: &Snapshot, mut new: TranslationProposals) -> Result<Op
         let known = |name: &str| name.trim() == source;
         if source.is_empty()
             || sheet.characters.iter().any(|c| known(&c.source_name))
-            || merged.characters.iter().any(|c| known(&c.source_name))
             || merged.rejected_characters.iter().any(|name| known(name))
         {
+            continue;
+        }
+        // The description and translation calls both propose a new character: fill what the
+        // pending entry lacks instead of dropping the second sighting.
+        if let Some(pending) = merged.characters.iter_mut().find(|c| known(&c.source_name)) {
+            for (field, new) in [
+                (&mut pending.target_name, character.target_name),
+                (&mut pending.speech_style, character.speech_style),
+                (&mut pending.appearance, character.appearance),
+                (&mut pending.notes, character.notes),
+            ] {
+                if field.trim().is_empty() {
+                    *field = new;
+                }
+            }
             continue;
         }
         merged.characters.push(koharu_scene::Character {
@@ -346,6 +360,7 @@ impl StageProcessor for Processor {
         let existing = input.scene.component::<SceneDescription>(input.page)?;
         let mut description = existing.as_ref().map(|d| d.text.clone());
         let mut described = None;
+        let mut appearances = Vec::new();
         if let Some(model) = self
             .config
             .description_model
@@ -363,11 +378,13 @@ impl StageProcessor for Processor {
                 .describe(model, self.config.generation, request)
                 .await
             {
-                Ok(Some(text)) => {
-                    description = Some(text.clone());
-                    described = Some(text);
+                Ok(found) => {
+                    appearances = found.proposals.characters;
+                    if let Some(text) = found.description {
+                        description = Some(text.clone());
+                        described = Some(text);
+                    }
                 }
-                Ok(None) => {}
                 Err(error) => tracing::warn!(%error, "scene description failed"),
             }
         }
@@ -435,6 +452,8 @@ impl StageProcessor for Processor {
         }
         // ponytail: replaces the whole component from this page's snapshot, so a review made while
         // pages translate concurrently can be overwritten; add project-level observation if it bites.
+        // Appearance proposals ride with the translation call's so one new character is one entry.
+        translated.proposals.characters.extend(appearances);
         if let Some(merged) = merge_proposals(&input.scene, translated.proposals)? {
             edit.set_project(&merged)?;
         }
@@ -730,6 +749,60 @@ mod tests {
         );
         let terms = page_terms(&scene, &["魔王"]).unwrap();
         assert_eq!((terms.len(), terms[0].tentative), (1, true));
+    }
+
+    #[tokio::test]
+    async fn description_and_translation_proposals_for_one_character_merge() {
+        let scene = scene_with(vec![], vec![], Proposals::default()).await;
+        let named = TranslationCharacter {
+            source_name: "ヒナ".into(),
+            target_name: "Hina".into(),
+            speech_style: "curt".into(),
+            ..Default::default()
+        };
+        let seen = TranslationCharacter {
+            source_name: "ヒナ".into(),
+            target_name: "Other".into(),
+            appearance: "red scarf".into(),
+            ..Default::default()
+        };
+        // Either order gives one pending entry; what the first call said is not overwritten.
+        for (first, second, target) in [(&named, &seen, "Hina"), (&seen, &named, "Other")] {
+            let new = TranslationProposals {
+                characters: vec![first.clone(), second.clone()],
+                ..Default::default()
+            };
+            let merged = merge_proposals(&scene, new).unwrap().unwrap();
+            assert_eq!(merged.characters.len(), 1);
+            let merged = &merged.characters[0];
+            assert_eq!(merged.target_name, target);
+            assert_eq!(merged.speech_style, "curt");
+            assert_eq!(merged.appearance, "red scarf");
+        }
+
+        // An appearance-only sighting becomes a pending character; a rejected one is dropped.
+        let scene = scene_with(
+            vec![],
+            vec![],
+            Proposals {
+                rejected_characters: vec!["ミト".into()],
+                ..Default::default()
+            },
+        )
+        .await;
+        let new = TranslationProposals {
+            characters: ["ヒナ", "ミト"]
+                .map(|name| TranslationCharacter {
+                    source_name: name.into(),
+                    appearance: "red scarf".into(),
+                    ..Default::default()
+                })
+                .into(),
+            ..Default::default()
+        };
+        let merged = merge_proposals(&scene, new).unwrap().unwrap();
+        assert_eq!(merged.characters.len(), 1);
+        assert_eq!(merged.characters[0].appearance, "red scarf");
     }
 
     #[tokio::test]

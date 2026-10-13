@@ -91,8 +91,11 @@ fn description(provider: &str, text: &str) -> anyhow::Result<Translated> {
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(str::to_owned);
+    // Characters the model could not match to the sheet; read like translation proposals.
+    let proposals = proposals(&json!({ "characters": value.get("characters") }));
     Ok(Translated {
         description,
+        proposals,
         ..Translated::default()
     })
 }
@@ -183,9 +186,22 @@ pub(crate) fn request_schema(request: &TranslationRequest) -> Value {
                 "description": {
                     "type": "string",
                     "description": "Who is present, what is happening, and the mood of the page."
+                },
+                "characters": {
+                    "type": "array",
+                    "description": "Characters on the page that match nobody on the character sheet.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "source_name": { "type": "string" },
+                            "appearance": { "type": "string" }
+                        },
+                        "required": ["source_name", "appearance"],
+                        "additionalProperties": false
+                    }
                 }
             },
-            "required": ["description"],
+            "required": ["description", "characters"],
             "additionalProperties": false
         });
     }
@@ -309,7 +325,8 @@ fn description_system_prompt(request: &TranslationRequest) -> String {
             - Look at the attached page image.
             - Say who is present, what is happening, and the mood. Note who seems to be speaking to whom.
             - Write the description only in {target}, in a few plain sentences. Describe what is shown; do not translate or transcribe the dialogue.
-            - Return only a JSON object with a `description` string.
+            - List in `characters` each person who matches nobody on the character sheet: `source_name` as the page names them (empty if unnamed), and their `appearance`. Use an empty array when everyone is matched.
+            - Return only a JSON object with a `description` string and a `characters` array.
         "},
         target = request.target_language,
     )
@@ -695,7 +712,7 @@ mod tests {
         assert_eq!(input["characters"][0]["appearance"], "twin tails");
         assert!(system.contains("Character sheet"));
         let schema = request_schema(&request);
-        assert_eq!(schema["required"], json!(["description"]));
+        assert_eq!(schema["required"], json!(["description", "characters"]));
 
         let described = translations("test", r#"{"description":" Two friends. "}"#, &[]).unwrap();
         assert_eq!(described.description.as_deref(), Some("Two friends."));
@@ -707,6 +724,20 @@ mod tests {
             );
         }
         assert!(translations("test", "not json", &[]).is_err());
+
+        let unmatched = translations(
+            "test",
+            r#"{"description":"x","characters":[{"source_name":"ヒナ","appearance":"red scarf"},{"source_name":"  ","appearance":"b"},{"source_name":"ミト","appearance":null}]}"#,
+            &[],
+        )
+        .unwrap();
+        let found: Vec<_> = unmatched
+            .proposals
+            .characters
+            .iter()
+            .map(|c| (c.source_name.as_str(), c.appearance.as_str()))
+            .collect();
+        assert_eq!(found, [("ヒナ", "red scarf"), ("ミト", "")]);
     }
 
     #[test]

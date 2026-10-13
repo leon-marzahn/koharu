@@ -163,14 +163,15 @@ impl Translator {
         Ok((provider_id, translated))
     }
 
-    /// Describes one page from `request.image`. `None` when the model gave no description.
+    /// Describes one page from `request.image`: `description` is `None` when the model gave none,
+    /// and `proposals.characters` are the people it could not match to the sheet.
     /// Needs a model that reads images; the machine-translation providers cannot.
     pub async fn describe(
         &self,
         selection: &ModelSelection,
         generation: GenerationConfig,
         request: TranslationRequest,
-    ) -> anyhow::Result<Option<String>> {
+    ) -> anyhow::Result<Translated> {
         anyhow::ensure!(request.describe, "not a description request");
         anyhow::ensure!(
             request.image.is_some(),
@@ -186,11 +187,7 @@ impl Translator {
             ),
             _ => {}
         }
-        Ok(self
-            .translate(selection, generation, request)
-            .await?
-            .1
-            .description)
+        Ok(self.translate(selection, generation, request).await?.1)
     }
 
     #[tracing::instrument(skip_all)]
