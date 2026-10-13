@@ -15,7 +15,7 @@ Follow-up to 25, from the user's test of the merged build on a Retina display (d
 
 **Blocked by:** none
 
-**Status:** done (problem 3 not reproduced, see notes)
+**Status:** in-progress (problem 3 unconfirmed in the desktop app)
 
 - [x] Each failure reproduced in a real browser before the fix (1 and 2; 3 did not reproduce)
 - [x] Toolbar buttons are clickable in Paint mode (elementFromPoint proof)
