@@ -26,11 +26,11 @@ pub use component::{Component, ValidationContext};
 pub use components::{
     Asset, AssetInput, AssetMetadata, AssetRole, Authored, Character, CharacterSheet,
     CharacterUpdate, DetectionAnalysis, DetectionLabel, EntityOrigin, FIT_SCALE, FontStyle,
-    Generation, Geometry, Group, LanguageTag, OcrAnalysis, Origin, Page, PageDraft, Point, Project,
-    Proposals, RasterLayer, RasterLayerKind, Region, RegionKind, Relation, RelationKind,
-    SourceText, StalePage, Term, TermList, TermUpdate, TextAlignment, TextContent, TextDirection,
-    TextGroup, TextLayout, TextLayoutKind, TextRole, Translation, Typography, Visibility,
-    WritingMode,
+    Generation, Geometry, Group, LanguageTag, OcrAnalysis, Origin, Page, PageDraft, PageStatus,
+    Point, Project, Proposals, RasterLayer, RasterLayerKind, Region, RegionKind, Relation,
+    RelationKind, SourceText, StalePage, Term, TermList, TermUpdate, TextAlignment, TextContent,
+    TextDirection, TextGroup, TextLayout, TextLayoutKind, TextRole, Translation, Typography,
+    Visibility, WritingMode,
 };
 pub use document::{AnalysisRegionRef, GroupRef, TextContentRef, TextLayerRef};
 pub use edit::{At, Edit, RemovePolicy};

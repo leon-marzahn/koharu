@@ -310,7 +310,16 @@
     "rename": "重命名",
     "renameDescription": "为此页面选择一个新名称。",
     "renameTitle": "重命名页面",
-    "selected": "已选择 {{count}}"
+    "selected": "已选择 {{count}}",
+    "status": {
+      "todo": "待办",
+      "inProgress": "进行中",
+      "done": "已完成"
+    },
+    "statusFilter": "按状态筛选",
+    "statusAll": "所有状态",
+    "setStatus": "标记为{{status}}",
+    "skippedDone": "已跳过 {{count}} 个已完成页面"
   },
   "outputPicker": {
     "instructions": "翻译说明",

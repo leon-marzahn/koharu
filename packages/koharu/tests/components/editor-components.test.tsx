@@ -25,6 +25,7 @@ import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
 import { ProviderPreferences } from '@/components/preferences/ProviderPreferences'
 import { SettingsPage } from '@/components/preferences/SettingsPage'
+import { bulkScope } from '@/lib/bulk'
 import {
   fontsKey,
   pageKey,
@@ -514,6 +515,95 @@ describe('greenfield editor', () => {
       { scope: 'project' },
       { operation: 'only', stage: 'translation' },
     )
+  })
+
+  describe('page status', () => {
+    const summary = (id: string, status: 'in_progress' | 'done' | null, stale = false) => ({
+      id,
+      label: id,
+      size: { width: 1000, height: 1500 },
+      source_asset: 'source',
+      layer_count: 1,
+      stale,
+      status,
+    })
+
+    it('sets a status from the page menu and filters the rail by it', async () => {
+      const user = userEvent.setup()
+      installProject()
+      const setStatus = vi.spyOn(commands, 'setPageStatus').mockResolvedValue(null as never)
+      queryClient.setQueryData(pagesKey, [
+        summary('p1', null),
+        summary('p2', 'done'),
+        summary('p3', 'in_progress'),
+      ])
+      render(<PageRail />)
+
+      await user.click(screen.getByRole('button', { name: 'Actions for p1' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Mark as Done' }))
+      expect(setStatus).toHaveBeenLastCalledWith('p1', 'done')
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+
+      // Back to Todo clears the component (null), not a stored value.
+      await user.click(screen.getByRole('button', { name: 'Actions for p2' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Mark as Todo' }))
+      expect(setStatus).toHaveBeenLastCalledWith('p2', null)
+
+      await user.selectOptions(screen.getByLabelText('Filter by status'), 'done')
+      expect(screen.getByText('p2')).toBeInTheDocument()
+      expect(screen.queryByText('p1')).not.toBeInTheDocument()
+      expect(screen.queryByText('p3')).not.toBeInTheDocument()
+
+      await user.selectOptions(screen.getByLabelText('Filter by status'), 'todo')
+      expect(screen.getByText('p1')).toBeInTheDocument()
+      expect(screen.queryByText('p2')).not.toBeInTheDocument()
+    })
+
+    it('shows Done and Stale together', () => {
+      installProject()
+      queryClient.setQueryData(pagesKey, [summary('p1', 'done', true)])
+      render(<PageRail />)
+
+      expect(screen.getByText('Stale')).toBeInTheDocument()
+      expect(document.querySelector('[data-status="done"]')).toHaveTextContent('Done')
+    })
+
+    it('skips Done pages in bulk runs and reports the count', async () => {
+      const user = userEvent.setup()
+      installProject()
+      const process = vi.spyOn(commands, 'process').mockResolvedValue(null as never)
+      queryClient.setQueryData(pagesKey, [
+        summary('p1', null),
+        summary('p2', 'done', true),
+        summary('p3', 'in_progress', true),
+      ])
+      render(<PageRail />)
+
+      await user.click(screen.getByRole('button', { name: 'Retranslate 2 stale pages' }))
+      expect(process).toHaveBeenLastCalledWith(
+        { scope: 'pages', value: ['p3'] },
+        { operation: 'only', stage: 'translation' },
+      )
+
+      await user.click(screen.getByRole('button', { name: 'Retranslate all pages' }))
+      expect(process).toHaveBeenLastCalledWith(
+        { scope: 'pages', value: ['p1', 'p3'] },
+        { operation: 'only', stage: 'translation' },
+      )
+    })
+
+    it('still runs Done pages when they are selected explicitly', () => {
+      const pages = [summary('p1', 'done'), summary('p2', null)]
+      expect(bulkScope(pages)).toEqual({
+        scope: { scope: 'pages', value: ['p2'] },
+        skipped: 1,
+      })
+      expect(bulkScope([summary('p2', null)])).toEqual({
+        scope: { scope: 'project' },
+        skipped: 0,
+      })
+      expect(bulkScope([summary('p1', 'done')])).toEqual({ scope: null, skipped: 1 })
+    })
   })
 
   it('hides the stale retranslate action when no page is stale', () => {

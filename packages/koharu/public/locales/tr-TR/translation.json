@@ -310,7 +310,16 @@
     "rename": "Yeniden adlandır",
     "renameDescription": "Bu sayfa için yeni bir ad seçin.",
     "renameTitle": "Sayfayı yeniden adlandır",
-    "selected": "{{count}} seçili"
+    "selected": "{{count}} seçili",
+    "status": {
+      "todo": "Yapılacak",
+      "inProgress": "Devam ediyor",
+      "done": "Bitti"
+    },
+    "statusFilter": "Duruma göre filtrele",
+    "statusAll": "Tüm durumlar",
+    "setStatus": "{{status}} olarak işaretle",
+    "skippedDone": "{{count}} bitmiş sayfa atlandı"
   },
   "outputPicker": {
     "instructions": "Çeviri talimatları",

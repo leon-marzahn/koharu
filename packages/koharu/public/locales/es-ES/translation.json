@@ -310,7 +310,16 @@
     "rename": "Cambiar nombre",
     "renameDescription": "Elige un nombre nuevo para esta página.",
     "renameTitle": "Cambiar nombre de página",
-    "selected": "{{count}} seleccionadas"
+    "selected": "{{count}} seleccionadas",
+    "status": {
+      "todo": "Pendiente",
+      "inProgress": "En curso",
+      "done": "Hecha"
+    },
+    "statusFilter": "Filtrar por estado",
+    "statusAll": "Todos los estados",
+    "setStatus": "Marcar como {{status}}",
+    "skippedDone": "{{count}} páginas hechas omitidas"
   },
   "outputPicker": {
     "instructions": "Instrucciones de traducción",

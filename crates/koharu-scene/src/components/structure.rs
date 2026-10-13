@@ -165,6 +165,24 @@ impl Component for StalePage {
     }
 }
 
+/// The user's own workflow label for a page. Absent means Todo, so only InProgress and
+/// Done are stored. User-authored: the pipeline never writes it and nothing resets it.
+#[revisioned(revision = 1)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PageStatus {
+    InProgress,
+    Done,
+}
+
+impl Component for PageStatus {
+    const KIND: &'static str = "dev.koharu.page-status";
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Page {

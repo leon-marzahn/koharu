@@ -10,7 +10,7 @@ use koharu_desktop::Frame;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Character, CharacterSheet, Commit,
     EntityId, EntityOrigin, FIT_SCALE, FitsTo, FlowsIn, Geometry as SceneGeometry,
-    Group as SceneGroup, Origin, PageDraft, Point as ScenePoint, Presents, Proposals,
+    Group as SceneGroup, Origin, PageDraft, PageStatus, Point as ScenePoint, Presents, Proposals,
     RasterLayer as SceneRasterLayer, RasterLayerKind, RecognizedFrom, Region as SceneRegion,
     RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText, StalePage, Term,
     TermList, TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
@@ -65,6 +65,8 @@ pub struct PageSummary {
     pub layer_count: usize,
     /// Translation predates a sheet/term edit; cleared when the page is retranslated.
     pub stale: bool,
+    /// User-set workflow status; null means Todo.
+    pub status: Option<PageStatus>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -417,9 +419,25 @@ impl Project {
                     source_asset,
                     layer_count,
                     stale: snapshot.component::<StalePage>(page.id())?.is_some(),
+                    status: snapshot.component::<PageStatus>(page.id())?,
                 })
             })
             .collect()
+    }
+
+    /// `None` is Todo and removes the component, so every change is one commit.
+    pub(crate) async fn set_page_status(
+        &mut self,
+        page: EntityId,
+        status: Option<PageStatus>,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        snapshot.page(page)?;
+        let patch = snapshot.patch(|edit| match &status {
+            Some(status) => edit.set(page, status),
+            None => edit.remove::<PageStatus>(page),
+        })?;
+        self.commit(patch).await
     }
 
     pub(crate) async fn rename_page(&mut self, page: EntityId, label: String) -> Result<Commit> {
@@ -1799,6 +1817,24 @@ mod tests {
             .filter(|page| page.stale)
             .map(|page| page.label)
             .collect()
+    }
+
+    #[tokio::test]
+    async fn page_status_defaults_to_todo_and_is_one_undo_step() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        let page = page_with_source(&mut project, "p", "x").await;
+        let status = |project: &Project| Project::pages(&project.snapshot()).unwrap()[0].status;
+        assert_eq!(status(&project), None);
+
+        let commit = project
+            .set_page_status(page, Some(PageStatus::Done))
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        assert_eq!(status(&project), Some(PageStatus::Done));
+
+        project.undo().await.unwrap();
+        assert_eq!(status(&project), None);
     }
 
     #[tokio::test]

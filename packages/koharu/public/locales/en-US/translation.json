@@ -310,7 +310,16 @@
     "rename": "Rename",
     "renameDescription": "Choose a new name for this page.",
     "renameTitle": "Rename page",
-    "selected": "{{count}} selected"
+    "selected": "{{count}} selected",
+    "status": {
+      "todo": "Todo",
+      "inProgress": "In progress",
+      "done": "Done"
+    },
+    "statusFilter": "Filter by status",
+    "statusAll": "All statuses",
+    "setStatus": "Mark as {{status}}",
+    "skippedDone": "{{count}} done pages skipped"
   },
   "outputPicker": {
     "instructions": "Translation instructions",

@@ -1,26 +1,29 @@
 'use client'
 
+import { useTranslation } from 'react-i18next'
+
 import { InferenceControl } from '@/components/editor/InferenceControl'
 import { call } from '@/lib/backend'
-import { usePage } from '@/lib/queries'
+import { runBulk } from '@/lib/bulk'
+import { usePage, usePages } from '@/lib/queries'
 import { useKoharuStore, type PipelineScope } from '@/lib/store'
 import { commands, type Operation, type Scope } from '@koharu/bridge/protocol'
 
 export function CanvasCommandBar() {
+  const { t } = useTranslation()
   const page = usePage().data
+  const pages = usePages().data ?? []
   const selectedPages = useKoharuStore((state) => state.selectedPages)
   const jobs = useKoharuStore((state) => state.jobs)
   const running = Object.values(jobs).find((job) => job.state === 'running')
 
   const run = (selection: PipelineScope, operation: Operation) => {
     if (!page) return
-    const scope: Scope =
-      selection === 'project'
-        ? { scope: 'project' }
-        : selection === 'selected-pages'
-          ? { scope: 'pages', value: selectedPages }
-          : { scope: 'pages', value: [page.id] }
-    void call(commands.process, scope, operation).catch(() => undefined)
+    const start = (scope: Scope) =>
+      void call(commands.process, scope, operation).catch(() => undefined)
+    if (selection === 'project') runBulk(pages, start, t)
+    else
+      start({ scope: 'pages', value: selection === 'selected-pages' ? selectedPages : [page.id] })
   }
 
   return (

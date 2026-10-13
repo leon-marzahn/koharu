@@ -310,7 +310,16 @@
     "rename": "名前を変更",
     "renameDescription": "このページの新しい名前を入力します。",
     "renameTitle": "ページ名を変更",
-    "selected": "{{count}}件選択中"
+    "selected": "{{count}}件選択中",
+    "status": {
+      "todo": "未着手",
+      "inProgress": "作業中",
+      "done": "完了"
+    },
+    "statusFilter": "ステータスで絞り込み",
+    "statusAll": "すべてのステータス",
+    "setStatus": "{{status}}にする",
+    "skippedDone": "完了済みの{{count}}ページをスキップしました"
   },
   "outputPicker": {
     "instructions": "翻訳指示",

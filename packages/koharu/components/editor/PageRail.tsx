@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 
 import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
 import { call } from '@/lib/backend'
+import { runBulk } from '@/lib/bulk'
 import {
   pageKey,
   pagesKey,
@@ -34,6 +35,7 @@ import {
   type CanvasPagePreparation,
   type Page,
   type PageImportSource,
+  type PageStatus,
   type PageSummary,
   type ProjectInfo,
   type Scope,
@@ -61,6 +63,12 @@ import { cn } from '@koharu/ui/lib/utils'
 
 const emptyPages: PageSummary[] = []
 
+// null in the protocol means Todo.
+const statuses = ['todo', 'in_progress', 'done'] as const
+type StatusFilter = 'all' | (typeof statuses)[number]
+const statusOf = (page: PageSummary) => page.status ?? 'todo'
+const statusLabel = { todo: 'todo', in_progress: 'inProgress', done: 'done' } as const
+
 interface IntentPrefetchState {
   project: string
   revision: number
@@ -83,13 +91,18 @@ export function PageRail() {
   const [query, setQuery] = useState('')
   const [renaming, setRenaming] = useState<PageSummary | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const normalized = query.trim().toLocaleLowerCase()
   const visiblePages = useMemo(
     () =>
       pages
         .map((page, index) => ({ page, index }))
-        .filter(({ page }) => !normalized || page.label.toLocaleLowerCase().includes(normalized)),
-    [normalized, pages],
+        .filter(
+          ({ page }) =>
+            (!normalized || page.label.toLocaleLowerCase().includes(normalized)) &&
+            (statusFilter === 'all' || statusOf(page) === statusFilter),
+        ),
+    [normalized, pages, statusFilter],
   )
   const pageList = useRef<HTMLDivElement>(null)
   const pageVirtualizer = useVirtualizer({
@@ -211,10 +224,21 @@ export function PageRail() {
   const busy = useKoharuStore((state) =>
     Object.values(state.jobs).some((job) => job.state === 'running'),
   )
-  const retranslate = (scope: Scope) =>
-    void call(commands.process, scope, { operation: 'only', stage: 'translation' }).catch(
-      () => undefined,
+  const retranslate = (only?: string[]) =>
+    runBulk(
+      pages,
+      (scope: Scope) =>
+        void call(commands.process, scope, { operation: 'only', stage: 'translation' }).catch(
+          () => undefined,
+        ),
+      t,
+      only,
     )
+
+  const setStatus = (page: string, status: PageStatus | null) =>
+    void call(commands.setPageStatus, page, status)
+      .then(() => refresh(projectKey, pagesKey))
+      .catch(() => undefined)
 
   const openRename = (page: PageSummary) => {
     setRenaming(page)
@@ -274,6 +298,19 @@ export function PageRail() {
                 onChange={(event) => setQuery(event.currentTarget.value)}
               />
             </label>
+            <select
+              value={statusFilter}
+              aria-label={t('navigator.statusFilter')}
+              className='mt-1 h-6 w-full rounded-md border border-input bg-background/70 px-1 text-[11px]'
+              onChange={(event) => setStatusFilter(event.currentTarget.value as StatusFilter)}
+            >
+              <option value='all'>{t('navigator.statusAll')}</option>
+              {statuses.map((status) => (
+                <option key={status} value={status}>
+                  {t(`navigator.status.${statusLabel[status]}`)}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -286,7 +323,7 @@ export function PageRail() {
                 variant='outline'
                 disabled={busy}
                 className='h-6 justify-start text-[10px]'
-                onClick={() => retranslate({ scope: 'pages', value: staleIds })}
+                onClick={() => retranslate(staleIds)}
               >
                 {t('navigator.retranslateStale', { count: staleIds.length })}
               </Button>
@@ -297,7 +334,7 @@ export function PageRail() {
               variant='ghost'
               disabled={busy}
               className='h-6 justify-start text-[10px]'
-              onClick={() => retranslate({ scope: 'project' })}
+              onClick={() => retranslate()}
             >
               {t('navigator.retranslateAll')}
             </Button>
@@ -345,6 +382,7 @@ export function PageRail() {
                       onSelect={(additive, range) => select(index, additive, range)}
                       onDragStart={() => setDragged(page.id)}
                       onDragEnd={() => setDragged(null)}
+                      onSetStatus={(status) => setStatus(page.id, status)}
                       onRename={() => openRename(page)}
                       onDelete={() => deletePage(page.id)}
                       onDrop={() => {
@@ -488,6 +526,7 @@ function PageItem({
   onSelect,
   onDragStart,
   onDragEnd,
+  onSetStatus,
   onRename,
   onDelete,
   onDrop,
@@ -500,6 +539,7 @@ function PageItem({
   onSelect: (additive: boolean, range: boolean) => void
   onDragStart: () => void
   onDragEnd: () => void
+  onSetStatus: (status: PageStatus | null) => void
   onRename: () => void
   onDelete: () => void
   onDrop: () => void
@@ -553,6 +593,19 @@ function PageItem({
               {t('navigator.stale')}
             </span>
           )}
+          {page.status && (
+            <span
+              data-status={page.status}
+              className={cn(
+                'shrink-0 rounded px-1 py-px text-[8px] font-medium',
+                page.status === 'done'
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
+              )}
+            >
+              {t(`navigator.status.${statusLabel[page.status]}`)}
+            </span>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -568,6 +621,18 @@ function PageItem({
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
               <DropdownMenuItem onClick={onRename}>{t('navigator.rename')}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {statuses.map((status) => (
+                <DropdownMenuItem
+                  key={status}
+                  disabled={statusOf(page) === status}
+                  onClick={() => onSetStatus(status === 'todo' ? null : status)}
+                >
+                  {t('navigator.setStatus', {
+                    status: t(`navigator.status.${statusLabel[status]}`),
+                  })}
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuSeparator />
               <DropdownMenuItem variant='destructive' onClick={onDelete}>
                 <Trash2 /> {t('navigator.delete')}

@@ -1615,3 +1615,36 @@ async fn pipeline_can_set_and_clear_the_stale_marker() {
         .snapshot;
     assert!(snapshot.component::<StalePage>(page_id).unwrap().is_none());
 }
+
+#[tokio::test]
+async fn page_status_is_user_authored_and_absent_means_todo() {
+    let mut session = Session::memory().await.unwrap();
+    let mut page_id = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            page_id = Some(edit.add_page(page(), At::End)?);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    let page_id = page_id.unwrap();
+    // A page without the component (an old project) reads as Todo.
+    assert!(snapshot.component::<PageStatus>(page_id).unwrap().is_none());
+
+    let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.translation").unwrap());
+    let mut edit = snapshot.edit_as(generation);
+    assert!(matches!(
+        edit.set(page_id, &PageStatus::Done),
+        Err(Error::Authorship(_))
+    ));
+
+    let patch = snapshot
+        .patch(|edit| edit.set(page_id, &PageStatus::Done))
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    assert_eq!(
+        snapshot.component::<PageStatus>(page_id).unwrap(),
+        Some(PageStatus::Done)
+    );
+}

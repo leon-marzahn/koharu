@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use koharu_desktop::{CanvasState, Desktop};
-use koharu_scene::{Character, EntityId, Proposals, Term};
+use koharu_scene::{Character, EntityId, PageStatus, Proposals, Term};
 use serde::Deserialize;
 use specta::Type;
 use tauri::State;
@@ -29,6 +29,20 @@ pub struct GeometryUpdate {
 pub struct TypographyUpdate {
     pub layer: EntityId,
     pub typography: Typography,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_page_status(
+    page: EntityId,
+    status: Option<PageStatus>,
+    project: State<'_, CurrentProject>,
+) -> Result<(), Error> {
+    let mut project = project.project.lock().await;
+    let project = project.as_mut().context("no project is open")?;
+    let commit = project.set_page_status(page, status).await?;
+    project.record_commit(&commit);
+    Ok(())
 }
 
 #[tracing::instrument(

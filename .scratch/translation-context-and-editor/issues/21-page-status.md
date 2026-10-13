@@ -9,15 +9,15 @@
 
 **Blocked by:** none (ticket 18 only adds one more scope to the skip rule)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Set a page's status from the rail; the marker shows and survives reopening the project
-- [ ] Filter the rail by status
-- [ ] Projects saved before this load with every page as Todo (`#[serde(default)]` or an absent component, with a load test)
-- [ ] Bulk runs skip Done pages and report the count; an explicit page selection runs them anyway
-- [ ] A page can be Done and Stale at once; both markers are visible
-- [ ] Setting a status is one undo step
-- [ ] The pipeline cannot overwrite it: a test through the real edit path with a pipeline write confirms the authorship check applies
-- [ ] New strings are in every locale; component tests cover set, filter and the skip rule
+- [x] Set a page's status from the rail; the marker shows and survives reopening the project
+- [x] Filter the rail by status
+- [x] Projects saved before this load with every page as Todo (`#[serde(default)]` or an absent component, with a load test)
+- [x] Bulk runs skip Done pages and report the count; an explicit page selection runs them anyway
+- [x] A page can be Done and Stale at once; both markers are visible
+- [x] Setting a status is one undo step
+- [x] The pipeline cannot overwrite it: a test through the real edit path with a pipeline write confirms the authorship check applies
+- [x] New strings are in every locale; component tests cover set, filter and the skip rule
 
 **Open question:** whether Done should also stop the stale marker from being set. Left as is: the marker is information, the skip rule is what protects the page.

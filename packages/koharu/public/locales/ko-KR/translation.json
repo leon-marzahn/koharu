@@ -310,7 +310,16 @@
     "rename": "이름 바꾸기",
     "renameDescription": "이 페이지의 새 이름을 정하세요.",
     "renameTitle": "페이지 이름 바꾸기",
-    "selected": "{{count}}개 선택됨"
+    "selected": "{{count}}개 선택됨",
+    "status": {
+      "todo": "할 일",
+      "inProgress": "진행 중",
+      "done": "완료"
+    },
+    "statusFilter": "상태로 필터링",
+    "statusAll": "모든 상태",
+    "setStatus": "{{status}}(으)로 표시",
+    "skippedDone": "완료된 {{count}}페이지를 건너뜀"
   },
   "outputPicker": {
     "instructions": "번역 지침",

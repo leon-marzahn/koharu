@@ -48,6 +48,7 @@ export const commands = {
 	import: (source: PageImportSource) => __TAURI_INVOKE<null>("import", { source }),
 	selectPage: (page: EntityId) => __TAURI_INVOKE<PageSelection>("select_page", { page }).then((v) => (({...v,page:({...v.page,layers:v.page.layers.map(i=>i),regions:v.page.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))})}) as typeof v)),
 	renamePage: (page: EntityId, label: string) => __TAURI_INVOKE<null>("rename_page", { page, label }),
+	setPageStatus: (page: EntityId, status: "in_progress" | "done" | null) => __TAURI_INVOKE<null>("set_page_status", { page, status }),
 	deletePages: (pages: EntityId[]) => __TAURI_INVOKE<null>("delete_pages", { pages }),
 	movePage: (page: EntityId, index: number) => __TAURI_INVOKE<null>("move_page", { page, index }),
 	setSourceText: (layer: EntityId, text: string) => __TAURI_INVOKE<null>("set_source_text", { layer, text }),
@@ -410,6 +411,12 @@ export type PageSize = {
 	height: number,
 };
 
+/**
+ *  The user's own workflow label for a page. Absent means Todo, so only InProgress and
+ *  Done are stored. User-authored: the pipeline never writes it and nothing resets it.
+ */
+export type PageStatus = "in_progress" | "done";
+
 export type PageSummary = {
 	id: EntityId,
 	label: string,
@@ -418,6 +425,8 @@ export type PageSummary = {
 	layer_count: number,
 	/**  Translation predates a sheet/term edit; cleared when the page is retranslated. */
 	stale: boolean,
+	/**  User-set workflow status; null means Todo. */
+	status: PageStatus | null,
 };
 
 export type PaintBrush = {

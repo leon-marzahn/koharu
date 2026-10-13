@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { AboutDialog } from '@/components/app/AboutDialog'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { call } from '@/lib/backend'
+import { runBulk } from '@/lib/bulk'
 import { selectableLayer } from '@/lib/geometry'
 import {
   pageKey,
@@ -60,6 +61,8 @@ export function TitleBar() {
 
   const run = (scope: Scope, operation: Operation = { operation: 'full' }) =>
     void call(commands.process, scope, operation).catch(() => undefined)
+  // Whole-project runs leave Done pages alone and say how many were skipped.
+  const runProject = (operation?: Operation) => runBulk(pages, (scope) => run(scope, operation), t)
 
   const closeProject = () => void call(commands.closeProject).catch(() => undefined)
 
@@ -194,10 +197,7 @@ export function TitleBar() {
           <MenubarMenu>
             <MenubarTrigger>{t('menu.process')}</MenubarTrigger>
             <MenubarContent>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() => run({ scope: 'project' })}
-              >
+              <MenubarItem disabled={!project || pages.length === 0} onClick={() => runProject()}>
                 {t('menu.processProject')}
               </MenubarItem>
               <MenubarItem
@@ -222,7 +222,7 @@ export function TitleBar() {
                 <MenubarItem
                   key={stage}
                   disabled={!project || pages.length === 0}
-                  onClick={() => run({ scope: 'project' }, { operation: 'through', stage })}
+                  onClick={() => runProject({ operation: 'through', stage })}
                 >
                   {t('menu.runPhase', {
                     phase: t(`phase.${stage}`),

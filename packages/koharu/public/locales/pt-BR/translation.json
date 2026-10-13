@@ -310,7 +310,16 @@
     "rename": "Renomear",
     "renameDescription": "Escolha um novo nome para esta página.",
     "renameTitle": "Renomear página",
-    "selected": "{{count}} selecionadas"
+    "selected": "{{count}} selecionadas",
+    "status": {
+      "todo": "A fazer",
+      "inProgress": "Em andamento",
+      "done": "Concluída"
+    },
+    "statusFilter": "Filtrar por status",
+    "statusAll": "Todos os status",
+    "setStatus": "Marcar como {{status}}",
+    "skippedDone": "{{count}} páginas concluídas ignoradas"
   },
   "outputPicker": {
     "instructions": "Instruções de tradução",

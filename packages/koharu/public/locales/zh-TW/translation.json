@@ -310,7 +310,16 @@
     "rename": "重新命名",
     "renameDescription": "為此頁面選擇新名稱。",
     "renameTitle": "重新命名頁面",
-    "selected": "已選擇 {{count}}"
+    "selected": "已選擇 {{count}}",
+    "status": {
+      "todo": "待辦",
+      "inProgress": "進行中",
+      "done": "已完成"
+    },
+    "statusFilter": "依狀態篩選",
+    "statusAll": "所有狀態",
+    "setStatus": "標記為{{status}}",
+    "skippedDone": "已略過 {{count}} 個已完成頁面"
   },
   "outputPicker": {
     "instructions": "翻譯指示",

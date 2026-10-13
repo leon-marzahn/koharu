@@ -310,7 +310,16 @@
     "rename": "Переименовать",
     "renameDescription": "Выберите новое имя для страницы.",
     "renameTitle": "Переименовать страницу",
-    "selected": "Выбрано: {{count}}"
+    "selected": "Выбрано: {{count}}",
+    "status": {
+      "todo": "К работе",
+      "inProgress": "В работе",
+      "done": "Готово"
+    },
+    "statusFilter": "Фильтр по статусу",
+    "statusAll": "Все статусы",
+    "setStatus": "Отметить: {{status}}",
+    "skippedDone": "Пропущено готовых страниц: {{count}}"
   },
   "outputPicker": {
     "instructions": "Инструкции по переводу",
