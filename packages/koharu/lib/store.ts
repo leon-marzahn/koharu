@@ -52,6 +52,12 @@ interface KoharuStore {
   translationModels: Model[]
   resources: ModelResources | null
   jobs: Record<string, Job>
+  // ponytail: one-box explanations live only in memory; reloading loses them. Upgrade: a stored
+  // project component written by the translation stage.
+  explanations: Record<string, string>
+  explainJobs: Record<string, string>
+  expectExplanation: (job: string, entity: string) => void
+  dismissExplanation: (entity: string) => void
   downloads: Record<string, Download>
   camera: { zoom: number; translation: [number, number]; fitted: boolean }
   canvasPage: EntityId | null
@@ -107,6 +113,16 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   translationModels: [],
   resources: null,
   jobs: {},
+  explanations: {},
+  explainJobs: {},
+  expectExplanation: (job, entity) =>
+    set((state) => ({ explainJobs: { ...state.explainJobs, [job]: entity } })),
+  dismissExplanation: (entity) =>
+    set((state) => {
+      const explanations = { ...state.explanations }
+      delete explanations[entity]
+      return { explanations }
+    }),
   downloads: {},
   camera: { zoom: 1, translation: [0, 0], fitted: true },
   canvasPage: null,
@@ -176,7 +192,15 @@ export function receiveCanvas(canvas: CanvasState): void {
 }
 
 export function receiveJob(job: Job): void {
-  useKoharuStore.setState((state) => ({ jobs: { ...state.jobs, [job.id]: job } }))
+  useKoharuStore.setState((state) => {
+    const entity = state.explainJobs[job.id]
+    return {
+      jobs: { ...state.jobs, [job.id]: job },
+      ...(entity && job.explanation
+        ? { explanations: { ...state.explanations, [entity]: job.explanation } }
+        : {}),
+    }
+  })
 }
 
 export function receiveDownload(download: Download): void {

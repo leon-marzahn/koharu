@@ -114,7 +114,7 @@ fn request_body<'a>(
                 kind: "json_schema",
                 name: "manga_translation",
                 strict: true,
-                schema: prompt::output_schema(request.segments.len()),
+                schema: prompt::request_schema(request),
             },
         },
     })

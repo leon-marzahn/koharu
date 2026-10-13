@@ -338,6 +338,17 @@ impl StageProcessor for Processor {
         .with_characters(character_sheet(&input.scene)?)
         .with_terms(terms)
         .with_known_sources(known_sources(&input.scene)?);
+        if let Some(explain) = &input.explain {
+            // Only a steered request carries the current translation as the previous attempt.
+            let previous = match targets.as_slice() {
+                [(entity, _)] => input
+                    .scene
+                    .component::<Translation>(*entity)?
+                    .map(|translation| translation.text.value),
+                _ => None,
+            };
+            request = request.with_explanation(explain.note.clone(), previous);
+        }
         if let Some(instructions) = self.config.instructions.as_deref() {
             request = request.with_instructions(instructions);
         }
@@ -346,10 +357,21 @@ impl StageProcessor for Processor {
         {
             request = request.with_image(image);
         }
-        let (provider, translated) = self
+        let (provider, mut translated) = self
             .translator
             .translate(&self.config.model, self.config.generation, request)
             .await?;
+        // ponytail: the explanation only travels as a progress event, so reloading loses it; the
+        // upgrade is a stored component (revision, serde default, load test) written in this edit.
+        if let (Some(explain), Some(text)) = (&input.explain, translated.explanation.take()) {
+            crate::progress::emit(
+                explain.progress.as_ref(),
+                crate::Progress::Explained {
+                    page: input.page,
+                    text,
+                },
+            );
+        }
         let language = LanguageTag::new(self.config.target_language.tag())?;
         let generated = generation(PRODUCER, provider)?;
         let mut edit = input.scene.edit_as(generated.clone());

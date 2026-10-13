@@ -70,7 +70,7 @@ pub(super) async fn translate(
         output_config: OutputConfig {
             format: JsonOutputFormat {
                 kind: "json_schema",
-                schema: prompt::output_schema(request.segments.len()),
+                schema: prompt::request_schema(request),
             },
         },
     };

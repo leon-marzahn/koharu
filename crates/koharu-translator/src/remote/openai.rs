@@ -115,7 +115,7 @@ pub(super) async fn translate(
             json_schema: JsonSchema {
                 name: "manga_translation",
                 strict: true,
-                schema: prompt::output_schema(request.segments.len()),
+                schema: prompt::request_schema(request),
             },
         },
     };

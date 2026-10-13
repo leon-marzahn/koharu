@@ -18,6 +18,8 @@ pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, S
         characters: &request.characters,
         terms: &request.terms,
         known_sources: &request.known_sources,
+        note: request.note.as_deref(),
+        previous_translation: request.previous_translation.as_deref(),
         segments: request
             .segments
             .iter()
@@ -54,6 +56,13 @@ pub(crate) fn translations(
     Ok(Translated {
         segments: translations,
         proposals: proposals(&output.proposals),
+        // Models send `null` (or nothing) for it; that must never fail the translation.
+        explanation: output
+            .explanation
+            .as_str()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_owned),
     })
 }
 
@@ -131,6 +140,20 @@ pub(crate) fn snippet(text: &str) -> String {
         let _ = write!(output, "… ({} bytes total)", trimmed.len());
     }
     output
+}
+
+/// The schema for `request`: the explanation field exists only for one-box requests, so a
+/// full-page request is unchanged.
+pub(crate) fn request_schema(request: &TranslationRequest) -> Value {
+    let mut schema = output_schema(request.segments.len());
+    if request.explain {
+        schema["properties"]["explanation"] = json!({
+            "type": "string",
+            "description": "A short explanation of why the line was translated this way."
+        });
+        schema["required"] = json!(["translations", "proposals", "explanation"]);
+    }
+    schema
 }
 
 pub(crate) fn output_schema(expected: usize) -> Value {
@@ -319,6 +342,27 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         Use empty arrays when there is nothing to propose. Proposals never replace the translations.
     "}.trim_end());
 
+    if request.explain {
+        prompt.push_str("\n\n");
+        prompt.push_str(&format!(
+            indoc! {"
+                Explanation requirements:
+                Also return an `explanation` string: a short note on why you translated the line this way (reading of the source, wordplay, alternatives considered), written in {target}.
+                The explanation never goes into `text`.
+            "},
+            target = request.target_language,
+        ));
+    }
+
+    if request.note.is_some() {
+        prompt.push_str("\n\n");
+        prompt.push_str(indoc! {"
+            Note requirements:
+            The `note` is guidance from the user for this request only; follow it.
+            When `previous_translation` is present it is the earlier attempt; improve on it using the note instead of starting over.
+        "}.trim_end());
+    }
+
     if request.image.is_some() {
         prompt.push_str("\n\n");
         prompt.push_str(indoc! {"
@@ -349,6 +393,10 @@ struct TranslationInput<'a> {
     terms: &'a [TranslationTerm],
     #[serde(skip_serializing_if = "<[String]>::is_empty")]
     known_sources: &'a [String],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_translation: Option<&'a str>,
     segments: Vec<TranslationInputSegment<'a>>,
 }
 
@@ -385,6 +433,7 @@ fn parse_output(text: &str) -> serde_json::Result<TranslationOutput> {
         Some(translations) => Ok(TranslationOutput {
             translations,
             proposals: first_value(text, "proposals").unwrap_or(Value::Null),
+            explanation: first_value(text, "explanation").unwrap_or(Value::Null),
         }),
         None => Err(error),
     }
@@ -395,6 +444,8 @@ struct TranslationOutput {
     translations: Vec<TranslationOutputSegment>,
     #[serde(default)]
     proposals: Value,
+    #[serde(default)]
+    explanation: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -767,5 +818,69 @@ mod tests {
         let prompt = translation_system_prompt(&request);
         assert!(prompt.contains("attached original page image"));
         assert!(prompt.contains("Translate only the supplied segments"));
+    }
+
+    #[test]
+    fn full_page_request_has_no_note_explanation_or_previous_attempt() {
+        let request = TranslationRequest::new(["a"], Language::English);
+        let (system, user) = prompts(&request).unwrap();
+
+        assert!(!system.contains("Explanation requirements"));
+        assert!(!system.contains("Note requirements"));
+        assert!(!user.contains("note") && !user.contains("previous_translation"));
+        assert_eq!(request_schema(&request), output_schema(1));
+    }
+
+    #[test]
+    fn one_box_request_carries_note_previous_attempt_and_explanation() {
+        let request = TranslationRequest::new(["イリイラレ"], Language::English)
+            .with_explanation(Some("try 入り入られ".into()), Some("Frustration".into()));
+        let (system, user) = prompts(&request).unwrap();
+        let user: Value = serde_json::from_str(&user).unwrap();
+
+        assert_eq!(user["note"], "try 入り入られ");
+        assert_eq!(user["previous_translation"], "Frustration");
+        assert!(system.contains("Explanation requirements"));
+        assert!(system.contains("Note requirements"));
+        let schema = request_schema(&request);
+        assert_eq!(schema["properties"]["explanation"]["type"], "string");
+        assert!(
+            schema["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("explanation"))
+        );
+    }
+
+    #[test]
+    fn previous_attempt_is_only_sent_with_a_note() {
+        let request = TranslationRequest::new(["a"], Language::English)
+            .with_explanation(Some("  ".into()), Some("old".into()));
+        let (_, user) = prompts(&request).unwrap();
+
+        assert!(!user.contains("note") && !user.contains("previous_translation"));
+        assert!(request.explain);
+    }
+
+    #[test]
+    fn missing_empty_or_null_explanation_still_applies_the_translation() {
+        let source = ["one".to_owned()];
+        for tail in [
+            "",
+            r#","explanation":null"#,
+            r#","explanation":"""#,
+            r#","explanation":"   ""#,
+            r#","explanation":7"#,
+        ] {
+            let response = format!(r#"{{"translations":[{{"id":0,"text":"hello"}}]{tail}}}"#);
+            let translated = translations("test", &response, &source).unwrap();
+            assert_eq!(translated.segments, ["hello"], "{tail}");
+            assert_eq!(translated.explanation, None, "{tail}");
+        }
+        let response = r#"{"translations":[{"id":0,"text":"hello"}],"explanation":" why "}"#;
+        assert_eq!(
+            translations("test", response, &source).unwrap().explanation,
+            Some("why".to_owned())
+        );
     }
 }

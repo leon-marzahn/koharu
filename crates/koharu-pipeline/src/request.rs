@@ -30,6 +30,10 @@ pub enum Operation {
     Only {
         stage: Stage,
     },
+    /// Translate the scoped boxes and explain the result; `note` steers this request only.
+    TranslateBox {
+        note: Option<String>,
+    },
     Stages {
         stages: Vec<Stage>,
     },
@@ -52,6 +56,7 @@ impl Operation {
                 stage: Stage::Inpainting,
             } => vec![Stage::Detection, Stage::Inpainting],
             Self::Only { stage } => vec![*stage],
+            Self::TranslateBox { .. } => vec![Stage::Translation],
             Self::Stages { stages } => Stage::ALL
                 .into_iter()
                 .filter(|stage| stages.contains(stage))
@@ -96,5 +101,16 @@ impl StopToken {
     #[must_use]
     pub fn stopped(&self) -> bool {
         self.0.load(Ordering::Acquire)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn translate_box_runs_only_the_translation_stage() {
+        let operation = Operation::TranslateBox { note: None };
+        assert_eq!(operation.stages().unwrap(), [Stage::Translation]);
     }
 }

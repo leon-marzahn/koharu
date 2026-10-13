@@ -22,6 +22,12 @@ pub struct TranslationRequest {
     /// Sources the model must not propose: rejected ones and pending ones not sent above.
     pub known_sources: Vec<String>,
     pub image: Option<Arc<DynamicImage>>,
+    /// One-box request: the model also explains why it translated the line that way.
+    pub explain: bool,
+    /// One-shot user steer for this request only.
+    pub note: Option<String>,
+    /// The box's current translation, sent with a note so the model improves on it.
+    pub previous_translation: Option<String>,
 }
 
 impl TranslationRequest {
@@ -40,7 +46,24 @@ impl TranslationRequest {
             terms: Vec::new(),
             known_sources: Vec::new(),
             image: None,
+            explain: false,
+            note: None,
+            previous_translation: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_explanation(
+        mut self,
+        note: Option<String>,
+        previous_translation: Option<String>,
+    ) -> Self {
+        self.explain = true;
+        self.note = note.filter(|note| !note.trim().is_empty());
+        // The previous attempt only matters when the user steers; without a note it is noise.
+        self.previous_translation =
+            previous_translation.filter(|text| self.note.is_some() && !text.trim().is_empty());
+        self
     }
 
     #[cfg(test)]
@@ -218,6 +241,8 @@ pub struct TranslationProposals {
 pub struct Translated {
     pub segments: Vec<String>,
     pub proposals: TranslationProposals,
+    /// Why the model chose this wording; only requested for one-box runs.
+    pub explanation: Option<String>,
 }
 
 impl From<Vec<String>> for Translated {
@@ -225,6 +250,7 @@ impl From<Vec<String>> for Translated {
         Self {
             segments,
             proposals: TranslationProposals::default(),
+            explanation: None,
         }
     }
 }

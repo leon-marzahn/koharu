@@ -48,6 +48,8 @@ pub struct Job {
     pub stage: Option<koharu_pipeline::Stage>,
     pub model: Option<String>,
     pub error: Option<String>,
+    /// The model's reason for a one-box translation, carried by the job and never stored.
+    pub explanation: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
@@ -107,6 +109,7 @@ pub(crate) async fn process(
         stage: None,
         model: None,
         error: None,
+        explanation: None,
     };
     processing.jobs.lock().insert(id, job.clone());
     job_channel.channel.publish(job);
@@ -183,6 +186,13 @@ pub(crate) async fn process(
                         stage = %stage,
                         model,
                     );
+                    None
+                }
+                Progress::Explained { text, .. } => {
+                    let processing = progress_handle.state::<Processing>();
+                    if let Some(job) = processing.jobs.lock().get_mut(&id) {
+                        job.explanation = Some(text);
+                    }
                     None
                 }
             };

@@ -22,9 +22,22 @@ pub(crate) struct StageInput {
     region: Option<Bounds>,
     images: Arc<ImageCache>,
     inpainting_mask: Option<InpaintingMask>,
+    explain: Option<Explain>,
+}
+
+/// A one-box translation: the user's note, and where the model's explanation goes.
+#[derive(Clone)]
+pub(crate) struct Explain {
+    pub(crate) note: Option<String>,
+    pub(crate) progress: Option<crate::ProgressSink>,
 }
 
 impl StageInput {
+    pub(crate) fn with_explain(mut self, explain: Explain) -> Self {
+        self.explain = Some(explain);
+        self
+    }
+
     pub(crate) fn new(
         scene: Snapshot,
         page: EntityId,
@@ -40,6 +53,7 @@ impl StageInput {
             region,
             images,
             inpainting_mask,
+            explain: None,
         }
     }
 

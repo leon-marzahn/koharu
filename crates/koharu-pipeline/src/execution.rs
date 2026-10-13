@@ -17,7 +17,7 @@ use crate::{
     scheduler::Scheduler,
     scope::NormalizedScope,
     stage_runner::{StageCompletion, StageJob, StageOutcome, StageRunner},
-    stages::StageInput,
+    stages::{Explain, StageInput},
 };
 
 pub(crate) struct Execution<'a> {
@@ -37,6 +37,8 @@ pub(crate) struct Execution<'a> {
     started: Instant,
     inpainting_mask: Option<crate::InpaintingMask>,
     force_inpainting: bool,
+    /// Set for a one-box translation; holds its note.
+    translate_box: Option<Option<String>>,
 }
 
 /// "Inpaint" on its own is a retry: redo pages that already have a cleanup layer.
@@ -60,6 +62,10 @@ impl<'a> Execution<'a> {
         let started = Instant::now();
         let base = snapshot.revision();
         let force_inpainting = forces_inpainting(&request.operation);
+        let translate_box = match &request.operation {
+            Operation::TranslateBox { note } => Some(note.clone()),
+            _ => None,
+        };
         let stages = request
             .operation
             .stages()
@@ -101,6 +107,7 @@ impl<'a> Execution<'a> {
             started,
             inpainting_mask: request.inpainting_mask,
             force_inpainting,
+            translate_box,
         })
     }
 
@@ -145,19 +152,26 @@ impl<'a> Execution<'a> {
             .entry(page)
             .or_insert_with(|| Arc::new(ImageCache::default()))
             .clone();
+        let mut input = StageInput::new(
+            self.scene.clone(),
+            page,
+            self.scope.entities(),
+            self.scope.region(page),
+            images,
+            self.inpainting_mask
+                .as_ref()
+                .filter(|mask| stage == Stage::Inpainting && mask.page == page)
+                .cloned(),
+        );
+        if let Some(note) = &self.translate_box {
+            input = input.with_explain(Explain {
+                note: note.clone(),
+                progress: self.progress.clone(),
+            });
+        }
         Some(StageJob::new(
             stage,
-            StageInput::new(
-                self.scene.clone(),
-                page,
-                self.scope.entities(),
-                self.scope.region(page),
-                images,
-                self.inpainting_mask
-                    .as_ref()
-                    .filter(|mask| stage == Stage::Inpainting && mask.page == page)
-                    .cloned(),
-            ),
+            input,
             self.stop.clone(),
             self.progress.clone(),
             self.force_inpainting && stage == Stage::Inpainting,

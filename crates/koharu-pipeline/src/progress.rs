@@ -29,6 +29,11 @@ pub enum Progress {
         page: EntityId,
         stage: Stage,
     },
+    /// The model's reason for a one-box translation. Never stored in the project.
+    Explained {
+        page: EntityId,
+        text: String,
+    },
 }
 
 pub type ProgressSink = Arc<dyn Fn(Progress) + Send + Sync>;

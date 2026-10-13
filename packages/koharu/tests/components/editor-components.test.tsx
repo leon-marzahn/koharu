@@ -35,7 +35,7 @@ import {
   queryClient,
   useCommand,
 } from '@/lib/queries'
-import { useKoharuStore } from '@/lib/store'
+import { receiveJob, useKoharuStore } from '@/lib/store'
 import * as canvasRuntime from '@koharu/bridge/canvas'
 import {
   commands,
@@ -910,8 +910,76 @@ describe('greenfield editor', () => {
     await user.click(screen.getByTestId('translate-box-element'))
     expect(process).toHaveBeenCalledWith(
       { scope: 'entities', value: ['element'] },
-      { operation: 'only', stage: 'translation' },
+      { operation: 'translate_box', note: null },
     )
+  })
+
+  it('sends a one-shot note for that box only and keeps it until the popover closes', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const process = vi.spyOn(commands, 'process').mockResolvedValue('job' as never)
+    render(<Inspector />)
+
+    await user.click(screen.getByTestId('translate-note-element'))
+    await user.type(screen.getByTestId('translate-note-input-element'), 'read as 入り入られ')
+    await user.click(screen.getByTestId('translate-note-run-element'))
+    expect(process).toHaveBeenLastCalledWith(
+      { scope: 'entities', value: ['element'] },
+      { operation: 'translate_box', note: 'read as 入り入られ' },
+    )
+    // Still open and editable, so the note can be refined and re-run.
+    expect(screen.getByTestId('translate-note-input-element')).toHaveValue('read as 入り入られ')
+
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByTestId('translate-box-element'))
+    expect(process).toHaveBeenLastCalledWith(
+      { scope: 'entities', value: ['element'] },
+      { operation: 'translate_box', note: null },
+    )
+    await user.click(screen.getByTestId('translate-note-element'))
+    expect(screen.getByTestId('translate-note-input-element')).toHaveValue('')
+  })
+
+  const explainedJob = (explanation: string | null): Job => ({
+    id: 'job',
+    state: 'finished',
+    completed: 1,
+    total: 1,
+    page: null,
+    stage: null,
+    model: null,
+    error: null,
+    explanation,
+  })
+
+  it('shows the explanation next to the box and lets the user dismiss it', async () => {
+    const user = userEvent.setup()
+    installProject()
+    vi.spyOn(commands, 'process').mockResolvedValue('job' as never)
+    render(<Inspector />)
+
+    await user.click(screen.getByTestId('translate-box-element'))
+    await waitFor(() => expect(useKoharuStore.getState().explainJobs.job).toBe('element'))
+    expect(screen.queryByTestId('explanation-element')).toBeNull()
+    act(() => receiveJob(explainedJob('Reads as 入り入られ, entering and being entered.')))
+    expect(screen.getByTestId('explanation-element')).toHaveTextContent(
+      'entering and being entered',
+    )
+
+    await user.click(screen.getByTestId('explanation-dismiss-element'))
+    expect(screen.queryByTestId('explanation-element')).toBeNull()
+  })
+
+  it.each([null, ''])('shows no panel for a %j explanation', async (explanation) => {
+    const user = userEvent.setup()
+    installProject()
+    vi.spyOn(commands, 'process').mockResolvedValue('job' as never)
+    render(<Inspector />)
+
+    await user.click(screen.getByTestId('translate-box-element'))
+    await waitFor(() => expect(useKoharuStore.getState().explainJobs.job).toBe('element'))
+    act(() => receiveJob(explainedJob(explanation)))
+    expect(screen.queryByTestId('explanation-element')).toBeNull()
   })
 
   it('steps font size by exactly 1 and keeps presets working', async () => {
@@ -1719,6 +1787,7 @@ describe('greenfield editor', () => {
           stage: null,
           model: null,
           error: null,
+          explanation: null,
         } satisfies Job,
       },
     })
@@ -2622,6 +2691,7 @@ describe('greenfield editor', () => {
           stage: 'ocr',
           model: 'manga-ocr',
           error: null,
+          explanation: null,
         },
       },
     })

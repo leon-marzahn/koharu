@@ -67,6 +67,7 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from '@koharu/ui/components/number-field'
+import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import {
   Select,
@@ -972,26 +973,96 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
                   .catch(() => undefined)
               }
             />
-            <Button
-              type='button'
-              variant='ghost'
-              size='xs'
-              data-testid={`translate-box-${layer.id}`}
-              className='h-5 justify-self-end rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
-              onClick={() =>
-                void call(
-                  commands.process,
-                  { scope: 'entities', value: [layer.id] },
-                  { operation: 'only', stage: 'translation' },
-                ).catch(() => undefined)
-              }
-            >
-              {t('inference.translateOnly')}
-            </Button>
+            <TranslateBox id={layer.id} />
           </InspectorField>
         </>
       )}
     </div>
+  )
+}
+
+// Translates one box through the entity scope. The note is one-shot: it lives only while the
+// popover is open and is never saved. The explanation arrives on the job and is kept in the store.
+function TranslateBox({ id }: { id: string }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const explanation = useKoharuStore((state) => state.explanations[id])
+  const run = (text: string) =>
+    call(
+      commands.process,
+      { scope: 'entities', value: [id] },
+      { operation: 'translate_box', note: text.trim() || null },
+    )
+      .then((job) => useKoharuStore.getState().expectExplanation(job, id))
+      .catch(() => undefined)
+
+  return (
+    <>
+      <div className='flex justify-end gap-0.5'>
+        <Popover
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next)
+            if (!next) setNote('')
+          }}
+        >
+          <PopoverTrigger
+            data-testid={`translate-note-${id}`}
+            className='h-5 rounded-md px-1.5 text-[9px] text-muted-foreground hover:text-foreground'
+          >
+            {t('inspector.translateWithNote')}
+          </PopoverTrigger>
+          <PopoverContent className='grid w-64 gap-1.5 p-2'>
+            <textarea
+              data-testid={`translate-note-input-${id}`}
+              aria-label={t('inspector.translateNote')}
+              placeholder={t('inspector.translateNotePlaceholder')}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              className='min-h-16 w-full resize-y rounded-md border bg-background px-1.5 py-1 text-[12px] leading-4'
+            />
+            <Button
+              type='button'
+              size='xs'
+              data-testid={`translate-note-run-${id}`}
+              className='justify-self-end'
+              onClick={() => void run(note)}
+            >
+              {t('inference.translateOnly')}
+            </Button>
+          </PopoverContent>
+        </Popover>
+        <Button
+          type='button'
+          variant='ghost'
+          size='xs'
+          data-testid={`translate-box-${id}`}
+          className='h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
+          onClick={() => void run('')}
+        >
+          {t('inference.translateOnly')}
+        </Button>
+      </div>
+      {explanation && (
+        <div
+          data-testid={`explanation-${id}`}
+          className='grid gap-1 rounded-md border bg-muted/40 p-1.5 text-[11px] leading-4'
+        >
+          <p>{explanation}</p>
+          <Button
+            type='button'
+            variant='ghost'
+            size='xs'
+            data-testid={`explanation-dismiss-${id}`}
+            className='h-5 justify-self-end px-1.5 text-[9px]'
+            onClick={() => useKoharuStore.getState().dismissExplanation(id)}
+          >
+            {t('inspector.dismissExplanation')}
+          </Button>
+        </div>
+      )}
+    </>
   )
 }
 

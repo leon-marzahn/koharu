@@ -324,6 +324,8 @@ export type Job = {
 	stage: Stage | null,
 	model: string | null,
 	error: string | null,
+	/**  The model's reason for a one-box translation, carried by the job and never stored. */
+	explanation: string | null,
 };
 
 export type JobId = string;
@@ -399,7 +401,9 @@ export type OpenAiConfig = Record<string, never>;
 
 export type OpenRouterConfig = Record<string, never>;
 
-export type Operation = { operation: "full" } | { operation: "through"; stage: Stage } | { operation: "only"; stage: Stage } | { operation: "stages"; stages: Stage[] };
+export type Operation = { operation: "full" } | { operation: "through"; stage: Stage } | { operation: "only"; stage: Stage } | 
+/**  Translate the scoped boxes and explain the result; `note` steers this request only. */
+{ operation: "translate_box"; note: string | null } | { operation: "stages"; stages: Stage[] };
 
 export type Page = {
 	id: EntityId,
