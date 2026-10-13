@@ -1683,3 +1683,55 @@ async fn painted_mask_is_user_authored_and_absent_on_old_regions() {
     let snapshot = session.commit(patch).await.unwrap().snapshot;
     assert!(snapshot.component::<PaintedMask>(region).unwrap().is_some());
 }
+
+#[tokio::test]
+async fn scene_description_keeps_user_text_and_is_absent_on_old_pages() {
+    let mut session = Session::memory().await.unwrap();
+    let mut page_id = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            page_id = Some(edit.add_page(page(), At::End)?);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    let page_id = page_id.unwrap();
+    // A page saved before the component existed has none.
+    assert!(
+        snapshot
+            .component::<SceneDescription>(page_id)
+            .unwrap()
+            .is_none()
+    );
+
+    let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.translation").unwrap());
+    let description = |text: &str, origin| SceneDescription {
+        text: text.to_owned(),
+        origin,
+    };
+    let mut edit = snapshot.edit_as(generation.clone());
+    edit.set(
+        page_id,
+        &description("generated", Origin::Generated(generation.clone())),
+    )
+    .unwrap();
+    let snapshot = session
+        .commit(edit.finish().unwrap())
+        .await
+        .unwrap()
+        .snapshot;
+
+    let patch = snapshot
+        .patch(|edit| edit.set(page_id, &description("mine", Origin::User)))
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    let mut edit = snapshot.edit_as(generation.clone());
+    assert!(matches!(
+        edit.set(
+            page_id,
+            &description("rerun", Origin::Generated(generation))
+        ),
+        Err(Error::Authorship(_))
+    ));
+}

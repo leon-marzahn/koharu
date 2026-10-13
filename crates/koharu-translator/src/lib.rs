@@ -126,14 +126,16 @@ impl Translator {
         );
         let provider = selection.provider;
         let provider_id: &'static str = provider.into();
-        if request.segments.is_empty() {
+        if request.segments.is_empty() && !request.describe {
             tracing::Span::current().record("outcome", "skipped");
             return Ok((provider_id, request.segments.into()));
         }
 
         let generation = generation.for_model(selection);
 
-        if Self::supports_vision(selection, &generation) {
+        // A description is made from the image, so it never depends on the translation vision
+        // toggle; the image is resized exactly as for translation.
+        if request.describe || Self::supports_vision(selection, &generation) {
             request.prepare_image()?;
         } else {
             request.remove_image();
@@ -159,6 +161,36 @@ impl Translator {
         }
         tracing::Span::current().record("outcome", "completed");
         Ok((provider_id, translated))
+    }
+
+    /// Describes one page from `request.image`. `None` when the model gave no description.
+    /// Needs a model that reads images; the machine-translation providers cannot.
+    pub async fn describe(
+        &self,
+        selection: &ModelSelection,
+        generation: GenerationConfig,
+        request: TranslationRequest,
+    ) -> anyhow::Result<Option<String>> {
+        anyhow::ensure!(request.describe, "not a description request");
+        anyhow::ensure!(
+            request.image.is_some(),
+            "a description needs the page image"
+        );
+        match selection.provider {
+            Provider::DeepL | Provider::GoogleCloudTranslation | Provider::Caiyun => {
+                anyhow::bail!("{} cannot describe images", selection.provider)
+            }
+            Provider::Local => anyhow::ensure!(
+                local::supports_vision(selection),
+                "the selected local model cannot read images"
+            ),
+            _ => {}
+        }
+        Ok(self
+            .translate(selection, generation, request)
+            .await?
+            .1
+            .description)
     }
 
     #[tracing::instrument(skip_all)]

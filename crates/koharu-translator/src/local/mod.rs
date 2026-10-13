@@ -59,7 +59,7 @@ impl LocalTranslator {
         generation: GenerationConfig,
     ) -> Result<crate::Translated> {
         let expected = request.segments.len();
-        if expected == 0 {
+        if expected == 0 && !request.describe {
             return Ok(Vec::new().into());
         }
         if !self

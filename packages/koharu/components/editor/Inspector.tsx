@@ -648,6 +648,24 @@ function LayersInspector() {
         </span>
       </header>
 
+      <div className='shrink-0 border-b border-border/80 px-2 py-1.5'>
+        <InspectorField label={t('inspector.sceneDescription')}>
+          <CommitTextarea
+            key={page.id}
+            aria-label={t('inspector.sceneDescription')}
+            placeholder={t('inspector.sceneDescriptionPlaceholder')}
+            wrap='soft'
+            className='max-h-24 min-h-9 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
+            value={page.description ?? ''}
+            onCommit={(text) =>
+              void call(commands.setSceneDescription, page.id, text)
+                .then(() => refresh(projectKey, pageKey))
+                .catch(() => undefined)
+            }
+          />
+        </InspectorField>
+      </div>
+
       <ScrollArea className='min-h-0 flex-1'>
         <div className='py-0.5'>
           {layers.map(({ layer, index, depth }) => {

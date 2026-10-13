@@ -126,6 +126,9 @@
   "inference": {
     "currentPage": "Current page",
     "currentPageDescription": "Process only the page in the canvas.",
+    "description": "Description",
+    "descriptionOff": "Off",
+    "descriptionTurnOff": "Turn off scene descriptions",
     "entireProject": "Entire project",
     "entireProjectDescription": "Process every page in this project.",
     "inpaintOnly": "Inpaint",
@@ -190,6 +193,8 @@
     "placement": "Placement",
     "resetAutoFit": "Reset to auto fit",
     "selectPage": "Select a page to inspect its layers.",
+    "sceneDescription": "Scene description",
+    "sceneDescriptionPlaceholder": "Who is here, what happens, the mood. Sent with translation; a hand-written text is kept on rerun.",
     "size": "Size",
     "source": "Source text",
     "style": "Style",

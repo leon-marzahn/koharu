@@ -11,7 +11,13 @@ use crate::{
 };
 
 pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, String)> {
+    if request.describe {
+        let user = serde_json::to_string(&json!({ "characters": request.characters }))
+            .context("failed to serialize description input")?;
+        return Ok((description_system_prompt(request), user));
+    }
     let input = TranslationInput {
+        scene_description: request.scene_description.as_deref(),
         source_language: request.source_language,
         target_language: request.target_language,
         context: &request.context,
@@ -36,6 +42,10 @@ pub(crate) fn translations(
     text: &str,
     source_segments: &[String],
 ) -> anyhow::Result<Translated> {
+    // A request without segments is a description request: there is nothing to translate.
+    if source_segments.is_empty() {
+        return description(provider, text);
+    }
     let output = parse_output(text).with_context(|| {
         format!(
             "{provider} returned invalid translation JSON for {} segments; response was: {}",
@@ -63,6 +73,27 @@ pub(crate) fn translations(
             .map(str::trim)
             .filter(|text| !text.is_empty())
             .map(str::to_owned),
+        description: None,
+    })
+}
+
+fn description(provider: &str, text: &str) -> anyhow::Result<Translated> {
+    let value: Value = serde_json::from_str(text).with_context(|| {
+        format!(
+            "{provider} returned invalid description JSON; response was: {}",
+            snippet(text)
+        )
+    })?;
+    // Models send `null` for a field the schema says is a string; that is "no description".
+    let description = value
+        .get("description")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned);
+    Ok(Translated {
+        description,
+        ..Translated::default()
     })
 }
 
@@ -145,6 +176,19 @@ pub(crate) fn snippet(text: &str) -> String {
 /// The schema for `request`: the explanation field exists only for one-box requests, so a
 /// full-page request is unchanged.
 pub(crate) fn request_schema(request: &TranslationRequest) -> Value {
+    if request.describe {
+        return json!({
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "Who is present, what is happening, and the mood of the page."
+                }
+            },
+            "required": ["description"],
+            "additionalProperties": false
+        });
+    }
     let mut schema = output_schema(request.segments.len());
     if request.explain {
         schema["properties"]["explanation"] = json!({
@@ -256,6 +300,41 @@ pub(crate) fn output_schema(expected: usize) -> Value {
     })
 }
 
+fn description_system_prompt(request: &TranslationRequest) -> String {
+    let mut prompt = format!(
+        indoc! {"
+            You describe one manga page so a translator knows the scene.
+
+            Requirements:
+            - Look at the attached page image.
+            - Say who is present, what is happening, and the mood. Note who seems to be speaking to whom.
+            - Write the description only in {target}, in a few plain sentences. Describe what is shown; do not translate or transcribe the dialogue.
+            - Return only a JSON object with a `description` string.
+        "},
+        target = request.target_language,
+    )
+    .trim_end()
+    .to_owned();
+    if !request.characters.is_empty() {
+        prompt.push_str("\n\n");
+        prompt.push_str(indoc! {"
+            Character sheet requirements:
+            The `characters` array lists the project's recurring characters with their `appearance`.
+            When someone on the page matches a character, name them by `source_name` instead of describing them by looks.
+        "}.trim_end());
+    }
+    if let Some(instructions) = request
+        .instructions
+        .as_deref()
+        .map(str::trim)
+        .filter(|instructions| !instructions.is_empty())
+    {
+        prompt.push_str("\n\nAdditional instructions:\n");
+        prompt.push_str(instructions);
+    }
+    prompt
+}
+
 fn translation_system_prompt(request: &TranslationRequest) -> String {
     let source = request
         .source_language
@@ -342,6 +421,18 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         Use empty arrays when there is nothing to propose. Proposals never replace the translations.
     "}.trim_end());
 
+    if request.scene_description.is_some() {
+        prompt.push_str("\n\n");
+        prompt.push_str(
+            indoc! {"
+            Scene description requirements:
+            `scene_description` says who is present, what is happening, and the mood on this page.
+            Use it to resolve who speaks to whom and the tone; do not translate or return it.
+        "}
+            .trim_end(),
+        );
+    }
+
     if request.explain {
         prompt.push_str("\n\n");
         prompt.push_str(&format!(
@@ -386,6 +477,8 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
 
 #[derive(Serialize)]
 struct TranslationInput<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scene_description: Option<&'a str>,
     source_language: Option<Language>,
     target_language: Language,
     context: &'a [TranslationContext],
@@ -586,6 +679,52 @@ mod tests {
         assert_eq!(input["context"][0]["translation"], "previous");
         assert_eq!(input["segments"][0]["id"], 0);
         assert_eq!(input["segments"][0]["text"], "new");
+    }
+
+    #[test]
+    fn description_request_sends_the_character_sheet_and_asks_for_a_description() {
+        let request = TranslationRequest::describing(Language::English).with_characters([
+            TranslationCharacter {
+                source_name: "A".into(),
+                appearance: "twin tails".into(),
+                ..Default::default()
+            },
+        ]);
+        let (system, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+        assert_eq!(input["characters"][0]["appearance"], "twin tails");
+        assert!(system.contains("Character sheet"));
+        let schema = request_schema(&request);
+        assert_eq!(schema["required"], json!(["description"]));
+
+        let described = translations("test", r#"{"description":" Two friends. "}"#, &[]).unwrap();
+        assert_eq!(described.description.as_deref(), Some("Two friends."));
+        // Models send null where the schema says string: that is no description, not an error.
+        for response in [r#"{"description":null}"#, r#"{"description":""}"#, "{}"] {
+            assert_eq!(
+                translations("test", response, &[]).unwrap().description,
+                None
+            );
+        }
+        assert!(translations("test", "not json", &[]).is_err());
+    }
+
+    #[test]
+    fn translation_request_carries_the_scene_description() {
+        let plain = TranslationRequest::new(["new"], Language::English);
+        let (system, user) = prompts(&plain).unwrap();
+        assert!(!system.contains("Scene description"));
+        assert!(!user.contains("scene_description"));
+
+        let request = plain.with_scene_description(Some("A quarrel at dusk.".into()));
+        let (system, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+        assert_eq!(input["scene_description"], "A quarrel at dusk.");
+        assert!(system.contains("Scene description"));
+        // A blank description is no description.
+        let blank = TranslationRequest::new(["new"], Language::English)
+            .with_scene_description(Some("  ".into()));
+        assert!(blank.scene_description.is_none());
     }
 
     #[test]

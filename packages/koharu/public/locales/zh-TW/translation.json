@@ -126,6 +126,9 @@
   "inference": {
     "currentPage": "目前頁面",
     "currentPageDescription": "只處理畫布中的頁面。",
+    "description": "Description",
+    "descriptionOff": "Off",
+    "descriptionTurnOff": "Turn off scene descriptions",
     "entireProject": "整個專案",
     "entireProjectDescription": "處理此專案中的每個頁面。",
     "inpaintOnly": "修復",
@@ -190,6 +193,8 @@
     "placement": "位置",
     "resetAutoFit": "重設為自動符合",
     "selectPage": "選擇頁面以檢查其圖層。",
+    "sceneDescription": "Scene description",
+    "sceneDescriptionPlaceholder": "Who is here, what happens, the mood. Sent with translation; a hand-written text is kept on rerun.",
     "size": "字級",
     "source": "原文",
     "style": "樣式",

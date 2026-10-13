@@ -12,7 +12,7 @@ use koharu_scene::{
     EntityId, EntityOrigin, FIT_SCALE, FitsTo, FlowsIn, Geometry as SceneGeometry,
     Group as SceneGroup, Origin, PageDraft, PageStatus, PaintedMask, Point as ScenePoint, Presents,
     Proposals, RasterLayer as SceneRasterLayer, RasterLayerKind, RecognizedFrom,
-    Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
+    Region as SceneRegion, RemovePolicy, Revision, SceneDescription, Session, Snapshot,
     SourceText as SceneSourceText, StalePage, Term, TermList, TextGroup as SceneTextGroup,
     TextLayout as SceneTextLayout, TextLayoutKind, TextRegion, Translation as SceneTranslation,
     Typography as SceneTypography, Visibility as SceneVisibility,
@@ -76,6 +76,8 @@ pub struct Page {
     pub size: PageSize,
     pub layers: Vec<Layer>,
     pub regions: Vec<AnalysisRegion>,
+    /// The page's scene description, generated or hand-written; `None` until described.
+    pub description: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -451,6 +453,32 @@ impl Project {
         let patch = snapshot.patch(|edit| match &status {
             Some(status) => edit.set(page, status),
             None => edit.remove::<PageStatus>(page),
+        })?;
+        self.commit(patch).await
+    }
+
+    /// A hand-written description is user-owned, so a rerun keeps it. Blank clears it, which
+    /// lets the next run describe the page again.
+    pub(crate) async fn set_scene_description(
+        &mut self,
+        page: EntityId,
+        text: String,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        snapshot.page(page)?;
+        let text = text.trim().to_owned();
+        let patch = snapshot.patch(|edit| {
+            if text.is_empty() {
+                edit.remove::<SceneDescription>(page)
+            } else {
+                edit.set(
+                    page,
+                    &SceneDescription {
+                        text,
+                        origin: Origin::User,
+                    },
+                )
+            }
         })?;
         self.commit(patch).await
     }
@@ -1264,6 +1292,9 @@ impl Project {
             },
             layers,
             regions,
+            description: snapshot
+                .component::<SceneDescription>(page)?
+                .map(|description| description.text),
         })
     }
 

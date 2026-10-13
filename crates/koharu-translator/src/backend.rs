@@ -28,9 +28,28 @@ pub struct TranslationRequest {
     pub note: Option<String>,
     /// The box's current translation, sent with a note so the model improves on it.
     pub previous_translation: Option<String>,
+    /// Page scene description sent to translation (who is present, what happens, the mood).
+    pub scene_description: Option<String>,
+    /// A description request: no segments, the page image goes in and a description comes out.
+    /// It rides the translation request so every provider's existing image path serves it.
+    pub describe: bool,
 }
 
 impl TranslationRequest {
+    /// A scene description request for one page; `with_image` and `with_characters` fill it in.
+    #[must_use]
+    pub fn describing(target_language: Language) -> Self {
+        let mut request = Self::new(Vec::<String>::new(), target_language);
+        request.describe = true;
+        request
+    }
+
+    #[must_use]
+    pub fn with_scene_description(mut self, description: Option<String>) -> Self {
+        self.scene_description = description.filter(|text| !text.trim().is_empty());
+        self
+    }
+
     #[must_use]
     pub fn new(
         segments: impl IntoIterator<Item = impl Into<String>>,
@@ -49,6 +68,8 @@ impl TranslationRequest {
             explain: false,
             note: None,
             previous_translation: None,
+            scene_description: None,
+            describe: false,
         }
     }
 
@@ -243,6 +264,8 @@ pub struct Translated {
     pub proposals: TranslationProposals,
     /// Why the model chose this wording; only requested for one-box runs.
     pub explanation: Option<String>,
+    /// Only for description requests: the page description, absent when the model gave none.
+    pub description: Option<String>,
 }
 
 impl From<Vec<String>> for Translated {
@@ -251,6 +274,7 @@ impl From<Vec<String>> for Translated {
             segments,
             proposals: TranslationProposals::default(),
             explanation: None,
+            description: None,
         }
     }
 }

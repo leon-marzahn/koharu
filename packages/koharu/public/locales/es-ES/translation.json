@@ -126,6 +126,9 @@
   "inference": {
     "currentPage": "Página actual",
     "currentPageDescription": "Procesa solo la página del lienzo.",
+    "description": "Description",
+    "descriptionOff": "Off",
+    "descriptionTurnOff": "Turn off scene descriptions",
     "entireProject": "Proyecto completo",
     "entireProjectDescription": "Procesa todas las páginas de este proyecto.",
     "inpaintOnly": "Rellenar",
@@ -190,6 +193,8 @@
     "placement": "Colocación",
     "resetAutoFit": "Restablecer ajuste automático",
     "selectPage": "Selecciona una página para inspeccionar sus capas.",
+    "sceneDescription": "Scene description",
+    "sceneDescriptionPlaceholder": "Who is here, what happens, the mood. Sent with translation; a hand-written text is kept on rerun.",
     "size": "Tamaño",
     "source": "Texto original",
     "style": "Estilo",

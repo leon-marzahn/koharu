@@ -198,6 +198,38 @@ impl Component for PageStatus {
     }
 }
 
+/// Who is on a page, what happens and the mood. Page-level: written by the description
+/// stage (generated) or the user (edited); a user-owned description is never replaced by a rerun.
+/// Absent on pages not described yet and on projects saved before this existed.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+pub struct SceneDescription {
+    pub text: String,
+    pub origin: Origin,
+}
+
+impl Component for SceneDescription {
+    const KIND: &'static str = "dev.koharu.scene-description";
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        if self.text.len() > 1024 * 1024 || self.text.contains('\0') {
+            return Err(Error::invalid(
+                "scene description is too large or contains NUL",
+            ));
+        }
+        self.origin.validate()
+    }
+
+    fn origin(&self) -> Option<&Origin> {
+        Some(&self.origin)
+    }
+
+    fn set_origin(&mut self, origin: Origin) -> bool {
+        self.origin = origin;
+        true
+    }
+}
+
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Page {

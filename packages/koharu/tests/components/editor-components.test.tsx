@@ -202,6 +202,7 @@ function installProject() {
     size: { width: 1000, height: 1500 },
     layers: [textLayer],
     regions: [],
+    description: null,
   }
   queryClient.setQueryData(projectKey, {
     name: 'Book',
@@ -656,13 +657,21 @@ describe('greenfield editor', () => {
   it('keeps rapid page switches on the latest native selection', async () => {
     installProject()
     const pages = [
-      { id: 'page', label: 'Page 1', size: { width: 1000, height: 1500 }, layers: [], regions: [] },
+      {
+        id: 'page',
+        label: 'Page 1',
+        size: { width: 1000, height: 1500 },
+        layers: [],
+        regions: [],
+        description: null,
+      },
       {
         id: 'page-2',
         label: 'Page 2',
         size: { width: 1000, height: 1500 },
         layers: [],
         regions: [],
+        description: null,
       },
       {
         id: 'page-3',
@@ -670,6 +679,7 @@ describe('greenfield editor', () => {
         size: { width: 1000, height: 1500 },
         layers: [],
         regions: [],
+        description: null,
       },
     ]
     queryClient.setQueryData(
@@ -795,6 +805,7 @@ describe('greenfield editor', () => {
       size: { width: 1000, height: 1500 },
       layers: [],
       regions: [],
+      description: null,
     }
     queryClient.setQueryData(pagesKey, [
       ...(queryClient.getQueryData<PageSummary[]>(pagesKey) ?? []),
@@ -828,6 +839,7 @@ describe('greenfield editor', () => {
       size: { width: 1000, height: 1500 },
       layers: [],
       regions: [],
+      description: null,
     }
     queryClient.setQueryData(pagesKey, [
       ...(queryClient.getQueryData<PageSummary[]>(pagesKey) ?? []),

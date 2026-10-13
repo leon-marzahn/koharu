@@ -4,12 +4,12 @@
 
 **Blocked by:** 05 Character sheet (manual)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Separate description model selection in settings
-- [ ] Stage runs once per page and skips pages that already have a description unless rerun is requested
-- [ ] Character sheet is sent to the description model
-- [ ] Description is editable and a user edit is not overwritten by a rerun
-- [ ] Translation request includes the description
-- [ ] Stage is skipped when no model is configured
-- [ ] Stage tests with a stub model cover run, skip and reuse
+- [x] Separate description model selection in settings
+- [x] Stage runs once per page and skips pages that already have a description unless rerun is requested
+- [x] Character sheet is sent to the description model
+- [x] Description is editable and a user edit is not overwritten by a rerun
+- [x] Translation request includes the description
+- [x] Stage is skipped when no model is configured
+- [x] Stage tests with a stub model cover run, skip and reuse

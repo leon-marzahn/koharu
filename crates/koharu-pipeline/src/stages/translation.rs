@@ -2,7 +2,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{
     Authored, CharacterSheet, CharacterUpdate, EntityId, Generation, LanguageTag, Origin,
-    Proposals, Snapshot, SourceText, StalePage, TermList, TermUpdate, Translation,
+    Proposals, SceneDescription, Snapshot, SourceText, StalePage, TermList, TermUpdate,
+    Translation,
 };
 use koharu_translator::{
     TranslationCharacter, TranslationCharacterUpdate, TranslationContext, TranslationProposals,
@@ -24,6 +25,17 @@ impl Processor {
     pub(super) fn new(config: TranslationConfig, translator: Translator) -> Self {
         Self { config, translator }
     }
+}
+
+/// Whether this run asks the description model for the page. A one-box run never does, and a
+/// page that already has a description (generated or hand-written) keeps it: clearing the text
+/// in the Inspector is how to describe the page again.
+fn should_describe(
+    configured: bool,
+    scoped_to_entities: bool,
+    existing: Option<&SceneDescription>,
+) -> bool {
+    configured && !scoped_to_entities && existing.is_none()
 }
 
 /// Source/translation pairs from the last `limit` pages before `page` that have any translation,
@@ -330,12 +342,42 @@ impl StageProcessor for Processor {
             .chain(context.iter().map(|hint| hint.source.as_str()))
             .collect::<Vec<_>>();
         let terms = page_terms(&input.scene, &term_text)?;
+        let characters = character_sheet(&input.scene)?;
+        let existing = input.scene.component::<SceneDescription>(input.page)?;
+        let mut description = existing.as_ref().map(|d| d.text.clone());
+        let mut described = None;
+        if let Some(model) = self
+            .config
+            .description_model
+            .as_ref()
+            .filter(|_| should_describe(true, input.entities.is_some(), existing.as_ref()))
+            && let Some(image) = input.images.get(&input.scene, input.page, "source").await?
+        {
+            let request = TranslationRequest::describing(self.config.target_language)
+                .with_characters(characters.clone())
+                .with_image(image);
+            // ponytail: a failed description only costs context, so translation goes on without
+            // it; surface the failure in the UI if silent skips confuse people.
+            match self
+                .translator
+                .describe(model, self.config.generation, request)
+                .await
+            {
+                Ok(Some(text)) => {
+                    description = Some(text.clone());
+                    described = Some(text);
+                }
+                Ok(None) => {}
+                Err(error) => tracing::warn!(%error, "scene description failed"),
+            }
+        }
         let mut request = TranslationRequest::new(
             targets.iter().map(|(_, source)| source.clone()),
             self.config.target_language,
         )
+        .with_scene_description(description)
         .with_context(context)
-        .with_characters(character_sheet(&input.scene)?)
+        .with_characters(characters)
         .with_terms(terms)
         .with_known_sources(known_sources(&input.scene)?);
         if let Some(explain) = &input.explain {
@@ -381,6 +423,15 @@ impl StageProcessor for Processor {
         for (entity, _) in &targets {
             edit.observe::<SourceText>(*entity)?;
             edit.observe::<Translation>(*entity)?;
+        }
+        if let Some(text) = described {
+            edit.set(
+                input.page,
+                &SceneDescription {
+                    text,
+                    origin: Origin::Generated(generated.clone()),
+                },
+            )?;
         }
         // ponytail: replaces the whole component from this page's snapshot, so a review made while
         // pages translate concurrently can be overwritten; add project-level observation if it bites.
@@ -635,6 +686,22 @@ mod tests {
             target: format!("{source}-t"),
             note: String::new(),
         }
+    }
+
+    #[test]
+    fn description_runs_only_when_configured_unscoped_and_missing() {
+        let generation = Generation::new(koharu_scene::ProducerId::new(PRODUCER).unwrap());
+        let described = |origin| SceneDescription {
+            text: "x".into(),
+            origin,
+        };
+        let generated = described(Origin::Generated(generation));
+        let user = described(Origin::User);
+        assert!(should_describe(true, false, None));
+        assert!(!should_describe(true, false, Some(&generated)));
+        assert!(!should_describe(false, false, None));
+        assert!(!should_describe(true, true, None));
+        assert!(!should_describe(true, false, Some(&user)));
     }
 
     #[tokio::test]

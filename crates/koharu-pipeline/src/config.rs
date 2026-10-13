@@ -186,6 +186,10 @@ pub struct TranslationConfig {
     /// configs saved before this field existed keep working.
     #[serde(default)]
     pub favourite_models: Vec<koharu_translator::ModelSelection>,
+    /// A vision model that describes each page before it is translated. `None` turns the
+    /// description stage off; defaulted on load so older configs keep working.
+    #[serde(default)]
+    pub description_model: Option<koharu_translator::ModelSelection>,
 }
 
 const fn default_previous_pages() -> u32 {
@@ -201,6 +205,7 @@ impl Default for TranslationConfig {
             instructions: None,
             previous_pages: default_previous_pages(),
             favourite_models: Vec::new(),
+            description_model: None,
         }
     }
 }

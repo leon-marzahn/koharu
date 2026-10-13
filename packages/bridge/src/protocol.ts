@@ -39,6 +39,8 @@ export const commands = {
 	size: PageSize,
 	layers: Layer[],
 	regions: AnalysisRegion[],
+	/**  The page's scene description, generated or hand-written; `None` until described. */
+	description: string | null,
 } | null>("get_page").then((v) => (v==null?v:({...v,layers:v.layers.map(i=>i),regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
 	listProjects: () => __TAURI_INVOKE<ProjectSummary[]>("list_projects"),
 	createProject: (name: string) => __TAURI_INVOKE<null>("create_project", { name }),
@@ -50,6 +52,7 @@ export const commands = {
 	renamePage: (page: EntityId, label: string) => __TAURI_INVOKE<null>("rename_page", { page, label }),
 	setPageStatus: (page: EntityId, status: "in_progress" | "done" | null) => __TAURI_INVOKE<null>("set_page_status", { page, status }),
 	dismissStale: (pages: EntityId[]) => __TAURI_INVOKE<null>("dismiss_stale", { pages }),
+	setSceneDescription: (page: EntityId, text: string) => __TAURI_INVOKE<null>("set_scene_description", { page, text }),
 	deletePages: (pages: EntityId[]) => __TAURI_INVOKE<null>("delete_pages", { pages }),
 	movePage: (page: EntityId, index: number) => __TAURI_INVOKE<null>("move_page", { page, index }),
 	setSourceText: (layer: EntityId, text: string) => __TAURI_INVOKE<null>("set_source_text", { layer, text }),
@@ -412,6 +415,8 @@ export type Page = {
 	size: PageSize,
 	layers: Layer[],
 	regions: AnalysisRegion[],
+	/**  The page's scene description, generated or hand-written; `None` until described. */
+	description: string | null,
 };
 
 export type PageImportSource = "files" | "folder";
@@ -623,6 +628,11 @@ export type TranslationConfig = {
 	 *  configs saved before this field existed keep working.
 	 */
 	favourite_models?: ModelSelection[],
+	/**
+	 *  A vision model that describes each page before it is translated. `None` turns the
+	 *  description stage off; defaulted on load so older configs keep working.
+	 */
+	description_model?: ModelSelection | null,
 };
 
 export type TypesettingConfig = {

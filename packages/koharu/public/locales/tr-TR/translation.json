@@ -126,6 +126,9 @@
   "inference": {
     "currentPage": "Geçerli sayfa",
     "currentPageDescription": "Yalnızca tuvaldeki sayfayı işler.",
+    "description": "Description",
+    "descriptionOff": "Off",
+    "descriptionTurnOff": "Turn off scene descriptions",
     "entireProject": "Tüm proje",
     "entireProjectDescription": "Bu projedeki tüm sayfaları işler.",
     "inpaintOnly": "Doldur",
@@ -190,6 +193,8 @@
     "placement": "Yerleşim",
     "resetAutoFit": "Otomatik sığdırmaya sıfırla",
     "selectPage": "Katmanlarını incelemek için bir sayfa seçin.",
+    "sceneDescription": "Scene description",
+    "sceneDescriptionPlaceholder": "Who is here, what happens, the mood. Sent with translation; a hand-written text is kept on rerun.",
     "size": "Boyut",
     "source": "Kaynak metin",
     "style": "Stil",

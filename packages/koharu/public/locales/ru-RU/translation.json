@@ -126,6 +126,9 @@
   "inference": {
     "currentPage": "Текущая страница",
     "currentPageDescription": "Обработать только страницу на холсте.",
+    "description": "Description",
+    "descriptionOff": "Off",
+    "descriptionTurnOff": "Turn off scene descriptions",
     "entireProject": "Весь проект",
     "entireProjectDescription": "Обработать все страницы проекта.",
     "inpaintOnly": "Закрасить",
@@ -190,6 +193,8 @@
     "placement": "Размещение",
     "resetAutoFit": "Вернуть автоподгонку",
     "selectPage": "Выберите страницу для просмотра её слоёв.",
+    "sceneDescription": "Scene description",
+    "sceneDescriptionPlaceholder": "Who is here, what happens, the mood. Sent with translation; a hand-written text is kept on rerun.",
     "size": "Размер",
     "source": "Исходный текст",
     "style": "Стиль",

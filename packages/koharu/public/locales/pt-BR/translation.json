@@ -126,6 +126,9 @@
   "inference": {
     "currentPage": "Página atual",
     "currentPageDescription": "Processa somente a página na tela.",
+    "description": "Description",
+    "descriptionOff": "Off",
+    "descriptionTurnOff": "Turn off scene descriptions",
     "entireProject": "Projeto inteiro",
     "entireProjectDescription": "Processa todas as páginas deste projeto.",
     "inpaintOnly": "Preencher",
@@ -190,6 +193,8 @@
     "placement": "Posicionamento",
     "resetAutoFit": "Redefinir para ajuste automático",
     "selectPage": "Selecione uma página para inspecionar suas camadas.",
+    "sceneDescription": "Scene description",
+    "sceneDescriptionPlaceholder": "Who is here, what happens, the mood. Sent with translation; a hand-written text is kept on rerun.",
     "size": "Tamanho",
     "source": "Texto original",
     "style": "Estilo",

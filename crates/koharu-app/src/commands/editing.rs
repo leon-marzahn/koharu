@@ -58,6 +58,20 @@ pub(crate) async fn set_page_status(
     Ok(())
 }
 
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_scene_description(
+    page: EntityId,
+    text: String,
+    project: State<'_, CurrentProject>,
+) -> Result<(), Error> {
+    let mut project = project.project.lock().await;
+    let project = project.as_mut().context("no project is open")?;
+    let commit = project.set_scene_description(page, text).await?;
+    project.record_commit(&commit);
+    Ok(())
+}
+
 #[tracing::instrument(
     target = "koharu_metrics",
     name = "page_renamed",

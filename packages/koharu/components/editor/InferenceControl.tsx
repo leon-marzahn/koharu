@@ -39,7 +39,7 @@ import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'
 
-type SelectorView = 'root' | 'model' | 'scope' | 'ocr' | 'inpainting' | 'output'
+type SelectorView = 'root' | 'model' | 'description' | 'scope' | 'ocr' | 'inpainting' | 'output'
 
 const full: Operation = { operation: 'full' }
 const translateOnly: Operation = { operation: 'only', stage: 'translation' }
@@ -195,6 +195,29 @@ function RuntimeSelector({
       .finally(() => setSavingModel(null))
   }
 
+  // The description stage has its own model; null turns the stage off.
+  const descriptionModel = translation?.description_model ?? null
+  const descriptionLabel = descriptionModel
+    ? (choices.find((choice) => modelKey(choice) === modelKey(descriptionModel))?.name ??
+      descriptionModel.model ??
+      t('inference.providerDefault'))
+    : t('inference.descriptionOff')
+  const chooseDescriptionModel = (next: ModelSelection | null) => {
+    if (!preferences || !translation || savingModel) return
+    setSavingModel(next ? modelKey(next) : 'description-off')
+    const pipeline = {
+      ...preferences.pipeline,
+      translation: { ...translation, description_model: next },
+    }
+    void savePreferences(pipeline, preferences.providers, preferences.typesetting)
+      .then((saved) => {
+        receivePreferences(saved)
+        setView('root')
+      })
+      .catch(() => undefined)
+      .finally(() => setSavingModel(null))
+  }
+
   const chooseScope = (next: PipelineScope) => {
     onScopeChange(next)
     setView('root')
@@ -269,6 +292,11 @@ function RuntimeSelector({
               onClick={() => setView('model')}
             />
             <SelectorRow
+              label={t('inference.description')}
+              value={descriptionLabel}
+              onClick={() => setView('description')}
+            />
+            <SelectorRow
               label={t('inference.scope')}
               value={t(`inference.scopeShort.${scope}`)}
               onClick={() => setView('scope')}
@@ -317,6 +345,35 @@ function RuntimeSelector({
             onBack={() => setView('root')}
             onSelect={chooseModel}
           />
+        )}
+
+        {view === 'description' && (
+          <>
+            <ModelPicker
+              value={descriptionModel}
+              models={choices}
+              providers={providers}
+              loading={loadingModels}
+              disabled={running}
+              busyModel={savingModel}
+              favourites={favourites}
+              onToggleFavourite={toggleFavourite}
+              onBack={() => setView('root')}
+              onSelect={chooseDescriptionModel}
+            />
+            {descriptionModel && (
+              <Button
+                type='button'
+                variant='ghost'
+                size='sm'
+                className='h-8 w-full justify-start rounded-lg px-2 text-[11px] font-normal text-muted-foreground hover:bg-primary/10 hover:text-foreground'
+                disabled={running || Boolean(savingModel)}
+                onClick={() => chooseDescriptionModel(null)}
+              >
+                {t('inference.descriptionTurnOff')}
+              </Button>
+            )}
+          </>
         )}
 
         {view === 'scope' && (
