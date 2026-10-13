@@ -348,6 +348,7 @@
     "title": "Saída da tradução"
   },
   "phase": {
+    "description": "Descrição da cena",
     "detection": "Detecção",
     "inpainting": "Preenchimento",
     "ocr": "OCR",

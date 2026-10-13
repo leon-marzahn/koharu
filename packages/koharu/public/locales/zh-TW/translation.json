@@ -348,6 +348,7 @@
     "title": "翻譯輸出"
   },
   "phase": {
+    "description": "場景描述",
     "detection": "偵測",
     "inpainting": "修補",
     "ocr": "OCR",

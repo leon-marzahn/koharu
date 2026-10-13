@@ -47,6 +47,8 @@ pub struct Job {
     pub page: Option<koharu_scene::EntityId>,
     pub stage: Option<koharu_pipeline::Stage>,
     pub model: Option<String>,
+    /// The translation stage is running its scene description; `model` then names that provider.
+    pub describing: bool,
     pub error: Option<String>,
     /// The model's reason for a one-box translation, carried by the job and never stored.
     pub explanation: Option<String>,
@@ -108,6 +110,7 @@ pub(crate) async fn process(
         page: None,
         stage: None,
         model: None,
+        describing: false,
         error: None,
         explanation: None,
     };
@@ -188,6 +191,18 @@ pub(crate) async fn process(
                     );
                     None
                 }
+                Progress::Describing { active, model, .. } => {
+                    let processing = progress_handle.state::<Processing>();
+                    let job = processing.jobs.lock().get_mut(&id).map(|job| {
+                        job.describing = active;
+                        job.model = Some(model);
+                        job.clone()
+                    });
+                    if let Some(job) = job {
+                        progress_handle.state::<JobChannel>().channel.publish(job);
+                    }
+                    None
+                }
                 Progress::Explained { text, .. } => {
                     let processing = progress_handle.state::<Processing>();
                     if let Some(job) = processing.jobs.lock().get_mut(&id) {
@@ -206,6 +221,7 @@ pub(crate) async fn process(
                         job.page = page;
                         job.stage = stage;
                         job.model = model;
+                        job.describing = false;
                         job.clone()
                     })
                 };

@@ -11,9 +11,9 @@ Out of scope: separate rows for each, history of past phases.
 
 **Blocked by:** 32 Describe the page without its text
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] During the describe block the row says description and names the description provider
-- [ ] During the translation block it says Translation and names the translation provider, as before
-- [ ] Works for a Translate run and for the Describe button
-- [ ] Rust test on the job's reported phase and provider; component test for the row; nine locales (real translations)
+- [x] During the describe block the row says description and names the description provider
+- [x] During the translation block it says Translation and names the translation provider, as before
+- [x] Works for a Translate run and for the Describe button
+- [x] Rust test on the job's reported phase and provider; component test for the row; nine locales (real translations)

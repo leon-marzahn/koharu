@@ -348,6 +348,7 @@
     "title": "번역 출력"
   },
   "phase": {
+    "description": "장면 설명",
     "detection": "감지",
     "inpainting": "인페인팅",
     "ocr": "OCR",

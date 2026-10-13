@@ -23,6 +23,7 @@ pub(crate) struct StageInput {
     images: Arc<ImageCache>,
     inpainting_mask: Option<InpaintingMask>,
     explain: Option<Explain>,
+    progress: Option<crate::ProgressSink>,
     /// Run only the description block of the translation stage.
     describe_only: bool,
 }
@@ -31,12 +32,16 @@ pub(crate) struct StageInput {
 #[derive(Clone)]
 pub(crate) struct Explain {
     pub(crate) note: Option<String>,
-    pub(crate) progress: Option<crate::ProgressSink>,
 }
 
 impl StageInput {
     pub(crate) fn with_explain(mut self, explain: Explain) -> Self {
         self.explain = Some(explain);
+        self
+    }
+
+    pub(crate) fn with_progress(mut self, progress: Option<crate::ProgressSink>) -> Self {
+        self.progress = progress;
         self
     }
 
@@ -61,6 +66,7 @@ impl StageInput {
             images,
             inpainting_mask,
             explain: None,
+            progress: None,
             describe_only: false,
         }
     }

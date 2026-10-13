@@ -372,10 +372,23 @@ impl Processor {
         let request = TranslationRequest::describing(self.config.target_language)
             .with_characters(characters.to_vec())
             .with_image(image);
-        self.translator
+        let report = |active: bool, model: &str| {
+            crate::progress::emit(
+                input.progress.as_ref(),
+                crate::Progress::Describing {
+                    page: input.page,
+                    active,
+                    model: model.to_owned(),
+                },
+            );
+        };
+        report(true, model.provider.name());
+        let described = self
+            .translator
             .describe(model, self.config.generation, request)
-            .await
-            .map(Some)
+            .await;
+        report(false, Translator::model(&self.config.model));
+        described.map(Some)
     }
 
     /// Describe only: writes the page's description and the appearance proposals, nothing else.
@@ -553,9 +566,9 @@ impl StageProcessor for Processor {
         };
         // ponytail: the explanation only travels as a progress event, so reloading loses it; the
         // upgrade is a stored component (revision, serde default, load test) written in this edit.
-        if let (Some(explain), Some(text)) = (&input.explain, translated.explanation.take()) {
+        if let (Some(_), Some(text)) = (&input.explain, translated.explanation.take()) {
             crate::progress::emit(
-                explain.progress.as_ref(),
+                input.progress.as_ref(),
                 crate::Progress::Explained {
                     page: input.page,
                     text,

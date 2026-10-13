@@ -348,6 +348,7 @@
     "title": "Вывод перевода"
   },
   "phase": {
+    "description": "Описание сцены",
     "detection": "Обнаружение",
     "inpainting": "Восстановление",
     "ocr": "OCR",

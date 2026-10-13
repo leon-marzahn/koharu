@@ -348,6 +348,7 @@
     "title": "翻訳出力"
   },
   "phase": {
+    "description": "シーンの説明",
     "detection": "検出",
     "inpainting": "インペイント",
     "ocr": "OCR",

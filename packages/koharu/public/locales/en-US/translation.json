@@ -348,6 +348,7 @@
     "title": "Translation output"
   },
   "phase": {
+    "description": "Scene description",
     "detection": "Detection",
     "inpainting": "Inpainting",
     "ocr": "OCR",

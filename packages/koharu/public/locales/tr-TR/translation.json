@@ -348,6 +348,7 @@
     "title": "Çeviri çıktısı"
   },
   "phase": {
+    "description": "Sahne açıklaması",
     "detection": "Algılama",
     "inpainting": "Doldurma",
     "ocr": "OCR",

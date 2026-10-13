@@ -167,11 +167,9 @@ impl<'a> Execution<'a> {
                 .cloned(),
         );
         if let Some(note) = &self.translate_box {
-            input = input.with_explain(Explain {
-                note: note.clone(),
-                progress: self.progress.clone(),
-            });
+            input = input.with_explain(Explain { note: note.clone() });
         }
+        input = input.with_progress(self.progress.clone());
         if self.describe_only {
             input = input.with_describe_only();
         }

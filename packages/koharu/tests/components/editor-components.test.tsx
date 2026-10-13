@@ -1132,6 +1132,7 @@ describe('greenfield editor', () => {
     page: null,
     stage: null,
     model: null,
+    describing: false,
     error: null,
     explanation,
   })
@@ -1970,6 +1971,7 @@ describe('greenfield editor', () => {
           page: null,
           stage: null,
           model: null,
+          describing: false,
           error: null,
           explanation: null,
         } satisfies Job,
@@ -2862,6 +2864,30 @@ describe('greenfield editor', () => {
     expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument()
   })
 
+  it('names the description and its provider while the description runs', () => {
+    installProject()
+    useKoharuStore.setState({
+      jobs: {
+        job: {
+          state: 'running',
+          id: 'job',
+          completed: 0,
+          total: 1,
+          page: null,
+          stage: 'translation',
+          model: 'lm-studio',
+          describing: true,
+          error: null,
+          explanation: null,
+        },
+      },
+    })
+    render(<ActivityCenter />)
+    expect(screen.getByText('Scene description')).toBeInTheDocument()
+    expect(screen.getByText('lm-studio')).toBeInTheDocument()
+    expect(screen.queryByText('Translation')).not.toBeInTheDocument()
+  })
+
   it('keeps running work visible and stoppable', async () => {
     installProject()
     useKoharuStore.setState({
@@ -2874,6 +2900,7 @@ describe('greenfield editor', () => {
           page: 'page',
           stage: 'ocr',
           model: 'manga-ocr',
+          describing: false,
           error: null,
           explanation: null,
         },

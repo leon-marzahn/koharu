@@ -136,6 +136,7 @@ describe('Tauri runtime', () => {
         page: 'page',
         stage: 'detection',
         model: 'model',
+        describing: false,
         error: null,
         explanation: null,
       })
@@ -202,6 +203,7 @@ describe('Tauri runtime', () => {
       page: 'page',
       stage: 'ocr',
       model: 'model',
+      describing: false,
       error: null,
       explanation: null,
     })

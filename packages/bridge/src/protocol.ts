@@ -330,6 +330,8 @@ export type Job = {
 	page: EntityId | null,
 	stage: Stage | null,
 	model: string | null,
+	/**  The translation stage is running its scene description; `model` then names that provider. */
+	describing: boolean,
 	error: string | null,
 	/**  The model's reason for a one-box translation, carried by the job and never stored. */
 	explanation: string | null,

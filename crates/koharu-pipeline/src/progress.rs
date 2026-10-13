@@ -29,6 +29,13 @@ pub enum Progress {
         page: EntityId,
         stage: Stage,
     },
+    /// The description block of the translation stage started (`active`) or ended. `model` is what
+    /// the job should name meanwhile: the description provider, or the translation model again.
+    Describing {
+        page: EntityId,
+        active: bool,
+        model: String,
+    },
     /// The model's reason for a one-box translation. Never stored in the project.
     Explained {
         page: EntityId,
