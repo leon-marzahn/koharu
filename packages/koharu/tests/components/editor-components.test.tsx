@@ -1164,6 +1164,7 @@ describe('greenfield editor', () => {
         const user = userEvent.setup()
         setup()
         const paint = vi.spyOn(commands, 'paintRegionMask').mockResolvedValue('job')
+        vi.spyOn(commands, 'getPaintedMask').mockResolvedValue([])
         await user.click(screen.getByTestId('region-region-1'))
         await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
         return { user, paint, surface: screen.getByTestId('region-paint-surface') }
@@ -1176,16 +1177,61 @@ describe('greenfield editor', () => {
         fireEvent.pointerUp(surface, { pointerId: 1, clientX: 200, clientY: -50 })
         await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
         expect(paint).toHaveBeenCalledTimes(1)
-        const [region, points] = paint.mock.calls[0]
+        const [region, strokes, , replace] = paint.mock.calls[0]
         expect(region).toBe('region-1')
-        expect(points.length).toBeGreaterThan(1)
-        for (const p of points) {
+        expect(replace).toBe(false)
+        expect(strokes).toHaveLength(1)
+        expect(strokes[0].length).toBeGreaterThan(1)
+        for (const p of strokes[0]) {
           expect(p.x).toBeGreaterThanOrEqual(8)
           expect(p.x).toBeLessThanOrEqual(62)
           expect(p.y).toBeGreaterThanOrEqual(8)
           expect(p.y).toBeLessThanOrEqual(42)
         }
         expect(screen.queryByTestId('region-paint-surface')).not.toBeInTheDocument()
+      })
+
+      const stroke = (surface: HTMLElement, x: number, y: number) => {
+        fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: x, clientY: y })
+        fireEvent.pointerUp(surface, { pointerId: 1, clientX: x, clientY: y })
+      }
+
+      it('sends each press as its own stroke and undoes the last one', async () => {
+        const { user, paint, surface } = await start()
+        stroke(surface, 20, 20)
+        stroke(surface, 40, 30)
+        stroke(surface, 50, 35)
+        await user.click(screen.getByRole('button', { name: 'Undo stroke', hidden: true }))
+        fireEvent.keyDown(window, { key: 'z', ctrlKey: true })
+        await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
+        const strokes = paint.mock.calls[0][1]
+        expect(strokes).toHaveLength(1)
+        expect(strokes[0][0]).toEqual({ x: 20, y: 20 })
+      })
+
+      it('Clear makes Apply replace the stored mask', async () => {
+        const { user, paint, surface } = await start()
+        await user.click(screen.getByRole('button', { name: 'Clear mask', hidden: true }))
+        stroke(surface, 20, 20)
+        await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
+        expect(paint.mock.calls[0][3]).toBe(true)
+      })
+
+      it('shows the stored mask while painting', async () => {
+        const png = new Uint8Array(24)
+        new DataView(png.buffer).setUint32(16, 100)
+        new DataView(png.buffer).setUint32(20, 80)
+        URL.createObjectURL = vi.fn(() => 'blob:mask')
+        URL.revokeObjectURL = vi.fn()
+        const user = userEvent.setup()
+        setup()
+        vi.spyOn(commands, 'getPaintedMask').mockResolvedValue([...png])
+        await user.click(screen.getByTestId('region-region-1'))
+        await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
+        const mask = await screen.findByTestId('region-stored-mask')
+        expect(mask).toHaveStyle({ width: '100px', height: '80px' })
+        await user.click(screen.getByRole('button', { name: 'Clear mask', hidden: true }))
+        expect(screen.queryByTestId('region-stored-mask')).not.toBeInTheDocument()
       })
 
       it('cancels with Escape without applying anything', async () => {

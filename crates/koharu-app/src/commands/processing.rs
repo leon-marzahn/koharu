@@ -239,7 +239,8 @@ pub(crate) async fn process(
         let (stopped, error) = match result {
             Ok(report) => (report.status == RunStatus::Stopped, None),
             Err(error) => {
-                tracing::error!(stage = ?error.stage, %error, "processing failed");
+                // `{error:#}` carries the whole cause chain, not just the outermost context.
+                tracing::error!(stage = ?error.stage, error = format_args!("{error:#}"), "processing failed");
                 (false, Some(format!("{error:#}")))
             }
         };

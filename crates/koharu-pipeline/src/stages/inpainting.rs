@@ -287,85 +287,107 @@ impl Model {
                 )
             }
         };
-        let page = input.page;
-        let manual = input.inpainting_mask.is_some();
-        let mut edit = if manual {
-            input.scene.edit()
-        } else {
-            input.scene.edit_as(generation(PRODUCER, model_name)?)
-        };
-        edit.observe_assets(page)?;
-        if let Some(entity) = cleanup_entity {
-            edit.observe::<RasterLayer>(entity)?;
-            edit.observe_assets(entity)?;
-        }
-        let image = image.to_rgba8();
-        if image.dimensions() != original.dimensions() || image.dimensions() != mask.dimensions() {
-            bail!("inpainted image dimensions do not match page {page}");
-        }
-        let mut overlay = if manual {
-            cleanup.unwrap_or_else(|| RgbaImage::new(image.width(), image.height()))
-        } else {
-            RgbaImage::new(image.width(), image.height())
-        };
-        for (x, y, target) in overlay.enumerate_pixels_mut() {
-            if mask.get_pixel(x, y)[0] < 127 {
-                continue;
-            }
-            let generated = image.get_pixel(x, y);
-            // Keep the complete cleanup mask opaque. Transparent texels next to
-            // edited pixels let linear canvas sampling reveal the artwork below.
-            *target = Rgba([generated[0], generated[1], generated[2], 255]);
-        }
-        let mut bytes = Cursor::new(Vec::new());
-        let width = overlay.width();
-        let height = overlay.height();
-        DynamicImage::ImageRgba8(overlay).write_to(&mut bytes, ImageFormat::Png)?;
-        let cleanup_entity = if let Some(entity) = cleanup_entity {
-            if manual {
-                let mut layer = input
-                    .scene
-                    .component::<RasterLayer>(entity)?
-                    .context("cleanup entity has no raster layer component")?;
-                let generated = layer.origin != Origin::User
-                    || input
-                        .scene
-                        .component::<EntityOrigin>(entity)?
-                        .is_some_and(|origin| origin.origin != Origin::User);
-                if generated {
-                    edit.promote_entity_to_user(entity)?;
-                    layer.origin = Origin::User;
-                    edit.set(entity, &layer)?;
-                }
-            }
-            entity
-        } else {
-            let entity = edit.add_entity(page, At::Start)?;
-            edit.set(
-                entity,
-                &RasterLayer {
-                    origin: Origin::User,
-                    name: "Cleanup".to_owned(),
-                    kind: RasterLayerKind::Cleanup,
-                },
-            )?;
-            entity
-        };
-        edit.set_asset(
+        cleanup_patch(
+            &input,
+            &original,
+            cleanup,
             cleanup_entity,
-            &AssetRole::new("source")?,
-            AssetInput::new(
-                Arc::<[u8]>::from(bytes.into_inner()),
-                "image/png",
-                AssetMetadata {
-                    width: Some(width),
-                    height: Some(height),
-                    attributes: BTreeMap::new(),
-                },
-            ),
-        )?;
-        finish(edit)
+            &mask,
+            image,
+            model_name,
+        )
     }
+}
+
+/// Merges inpainted pixels into the page's cleanup layer. Manual masks are user edits and keep
+/// the layer user-owned; automatic runs are generated.
+fn cleanup_patch(
+    input: &StageInput,
+    original: &DynamicImage,
+    cleanup: Option<RgbaImage>,
+    cleanup_entity: Option<koharu_scene::EntityId>,
+    mask: &GrayImage,
+    image: DynamicImage,
+    model_name: &str,
+) -> Result<koharu_scene::Patch> {
+    let page = input.page;
+    let manual = input.inpainting_mask.is_some();
+    let mut edit = if manual {
+        input.scene.edit()
+    } else {
+        input.scene.edit_as(generation(PRODUCER, model_name)?)
+    };
+    edit.observe_assets(page)?;
+    if let Some(entity) = cleanup_entity {
+        edit.observe::<RasterLayer>(entity)?;
+        edit.observe_assets(entity)?;
+    }
+    let image = image.to_rgba8();
+    if image.dimensions() != original.dimensions() || image.dimensions() != mask.dimensions() {
+        bail!("inpainted image dimensions do not match page {page}");
+    }
+    let mut overlay = if manual {
+        cleanup.unwrap_or_else(|| RgbaImage::new(image.width(), image.height()))
+    } else {
+        RgbaImage::new(image.width(), image.height())
+    };
+    for (x, y, target) in overlay.enumerate_pixels_mut() {
+        if mask.get_pixel(x, y)[0] < 127 {
+            continue;
+        }
+        let generated = image.get_pixel(x, y);
+        // Keep the complete cleanup mask opaque. Transparent texels next to
+        // edited pixels let linear canvas sampling reveal the artwork below.
+        *target = Rgba([generated[0], generated[1], generated[2], 255]);
+    }
+    let mut bytes = Cursor::new(Vec::new());
+    let width = overlay.width();
+    let height = overlay.height();
+    DynamicImage::ImageRgba8(overlay).write_to(&mut bytes, ImageFormat::Png)?;
+    let cleanup_entity = if let Some(entity) = cleanup_entity {
+        if manual {
+            let mut layer = input
+                .scene
+                .component::<RasterLayer>(entity)?
+                .context("cleanup entity has no raster layer component")?;
+            let generated = layer.origin != Origin::User
+                || input
+                    .scene
+                    .component::<EntityOrigin>(entity)?
+                    .is_some_and(|origin| origin.origin != Origin::User);
+            if generated {
+                edit.promote_entity_to_user(entity)?;
+                layer.origin = Origin::User;
+                edit.set(entity, &layer)?;
+            }
+        }
+        entity
+    } else {
+        let entity = edit.add_entity(page, At::Start)?;
+        edit.set(
+            entity,
+            &RasterLayer {
+                origin: Origin::User,
+                name: "Cleanup".to_owned(),
+                kind: RasterLayerKind::Cleanup,
+            },
+        )?;
+        entity
+    };
+    edit.set_asset(
+        cleanup_entity,
+        &AssetRole::new("source")?,
+        AssetInput::new(
+            Arc::<[u8]>::from(bytes.into_inner()),
+            "image/png",
+            AssetMetadata {
+                width: Some(width),
+                height: Some(height),
+                attributes: BTreeMap::new(),
+            },
+        ),
+    )?;
+    finish(edit)
 }
 
 #[derive(Clone, Debug)]
@@ -442,7 +464,7 @@ async fn prepare(input: &StageInput) -> Result<InpaintInput> {
             .flatten()
             .is_some_and(|layer| layer.kind == RasterLayerKind::Cleanup)
     });
-    let cleanup = if let Some(entity) = cleanup_entity {
+    let mut cleanup = if let Some(entity) = cleanup_entity {
         input
             .images
             .get(&input.scene, entity, "source")
@@ -451,6 +473,21 @@ async fn prepare(input: &StageInput) -> Result<InpaintInput> {
     } else {
         None
     };
+    // A repainted region mask replaces earlier cleaning in its box instead of merging into it.
+    if let (Some(cleanup), Some(bounds)) = (
+        cleanup.as_mut(),
+        input.inpainting_mask.as_ref().and_then(|m| m.restore),
+    ) {
+        for (x, y, pixel) in cleanup.enumerate_pixels_mut() {
+            if f64::from(x + 1) > bounds.x
+                && f64::from(y + 1) > bounds.y
+                && f64::from(x) < bounds.x + bounds.width
+                && f64::from(y) < bounds.y + bounds.height
+            {
+                *pixel = Rgba([0; 4]);
+            }
+        }
+    }
     if cleanup
         .as_ref()
         .is_some_and(|image| image.dimensions() != original.dimensions())
@@ -993,6 +1030,7 @@ mod tests {
             Some(crate::InpaintingMask {
                 page,
                 png: encode(&DynamicImage::ImageLuma8(transient)),
+                restore: None,
             }),
         );
 
@@ -1058,6 +1096,7 @@ mod tests {
             Some(crate::InpaintingMask {
                 page,
                 png: Arc::<[u8]>::from([]),
+                restore: None,
             }),
         );
         let processor = Processor::new(InpaintingModel::LaMa {}, koharu_ml::Device::cpu()).unwrap();
@@ -1184,6 +1223,185 @@ mod tests {
         assert_eq!(prepared.mask.get_pixel(7, 7), &Luma([255]));
         assert_eq!(prepared.mask.get_pixel(5, 5), &Luma([0]));
         assert_eq!(prepared.mask.get_pixel(0, 12), &Luma([255]));
+    }
+
+    /// Draw region, OCR and translate (generated writes), resize it (user geometry on region and
+    /// text box), paint a mask, then commit the manual cleanup through the real stage tail.
+    #[tokio::test]
+    async fn painting_a_mask_after_ocr_translate_and_resize_commits() {
+        use koharu_scene::{
+            Authored, FitsTo, LanguageTag, OcrAnalysis, PaintedMask, RecognizedFrom, SourceText,
+            TextDirection, TextLayout, TextLayoutKind, Translation,
+        };
+        let mut session = koharu_scene::Session::memory().await.unwrap();
+        let mut ids = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(
+                    koharu_scene::PageDraft::new("page", 16.0, 16.0),
+                    koharu_scene::At::End,
+                )?;
+                edit.set_asset(
+                    page,
+                    &AssetRole::new("source")?,
+                    png_asset(&DynamicImage::new_rgb8(16, 16)),
+                )?;
+                let region = edit.add_analysis_region::<TextRegion>(
+                    page,
+                    koharu_scene::At::End,
+                    &Geometry::rectangle(6.0, 6.0, 4.0, 4.0),
+                    None,
+                )?;
+                let content = edit.add_text_content(page, koharu_scene::At::End)?;
+                let layer = edit.add_text_layer(
+                    page,
+                    koharu_scene::At::End,
+                    content,
+                    &TextLayout {
+                        origin: Origin::User,
+                        kind: TextLayoutKind::Paragraph,
+                        angle_degrees: None,
+                    },
+                )?;
+                edit.relate::<RecognizedFrom>(content, region)?;
+                edit.relate::<FitsTo>(layer, region)?;
+                ids = Some((page, region, content, layer));
+                Ok(())
+            })
+            .unwrap();
+        session.commit(patch).await.unwrap();
+        let (page, region, content, layer) = ids.unwrap();
+
+        // An earlier automatic page run left a generated cleanup layer.
+        let generated_cleanup = generation(PRODUCER, "flux2-klein").unwrap();
+        let mut edit = session.snapshot().edit_as(generated_cleanup);
+        let cleanup = edit.add_entity(page, At::Start).unwrap();
+        edit.set(
+            cleanup,
+            &RasterLayer {
+                origin: Origin::User,
+                name: "Cleanup".to_owned(),
+                kind: RasterLayerKind::Cleanup,
+            },
+        )
+        .unwrap();
+        edit.set_asset(
+            cleanup,
+            &AssetRole::new("source").unwrap(),
+            // An earlier clean (as the 2 px box leaves) that a smaller mask must not keep.
+            png_asset(&DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+                16,
+                16,
+                Rgba([200, 0, 0, 255]),
+            ))),
+        )
+        .unwrap();
+        session.commit(edit.finish().unwrap()).await.unwrap();
+
+        let generated = generation("test.ocr", "m").unwrap();
+        let mut edit = session.snapshot().edit_as(generated.clone());
+        edit.set(
+            content,
+            &SourceText {
+                text: Authored::generated("source".to_owned(), generated.clone()),
+                language: LanguageTag::new("ja-JP").ok(),
+            },
+        )
+        .unwrap();
+        edit.set(
+            region,
+            &OcrAnalysis {
+                origin: Origin::Generated(generated.clone()),
+                direction: TextDirection::Horizontal,
+                confidence: None,
+                line_boundaries: Vec::new(),
+            },
+        )
+        .unwrap();
+        edit.set(
+            content,
+            &Translation {
+                text: Authored::generated("hello".to_owned(), generated.clone()),
+                language: LanguageTag::new("en-US").ok(),
+            },
+        )
+        .unwrap();
+        session.commit(edit.finish().unwrap()).await.unwrap();
+
+        // Resize, as set_region_geometry does.
+        let resized = Geometry {
+            origin: Origin::User,
+            ..Geometry::rectangle(5.0, 5.0, 8.0, 8.0)
+        };
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                edit.set(region, &resized)?;
+                edit.set(layer, &resized)?;
+                edit.remove::<PaintedMask>(region)?;
+                edit.remove_asset(region, &AssetRole::new("painted-mask")?)
+            })
+            .unwrap();
+        session.commit(patch).await.unwrap();
+
+        let mut painted = GrayImage::new(16, 16);
+        painted.put_pixel(7, 7, Luma([255]));
+        let painted = DynamicImage::ImageLuma8(painted);
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                edit.set(region, &PaintedMask {})?;
+                edit.set_asset(
+                    region,
+                    &AssetRole::new("painted-mask")?,
+                    png_asset(&painted),
+                )
+            })
+            .unwrap();
+        let snapshot = session.commit(patch).await.unwrap().snapshot;
+
+        let input = StageInput::new(
+            snapshot,
+            page,
+            None,
+            None,
+            Arc::new(crate::ImageCache::default()),
+            Some(crate::InpaintingMask {
+                page,
+                png: encode_png(&painted),
+                restore: Some(crate::Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 12.0,
+                    height: 12.0,
+                }),
+            }),
+        );
+        let prepared = prepare(&input).await.unwrap();
+        let cleanup_entity = prepared.cleanup_entity.unwrap();
+        let patch = cleanup_patch(
+            &input,
+            &prepared.original,
+            prepared.cleanup,
+            prepared.cleanup_entity,
+            &prepared.mask,
+            DynamicImage::new_rgb8(16, 16),
+            "test",
+        )
+        .unwrap();
+        let snapshot = session.commit(patch).await.unwrap().snapshot;
+
+        // Inside the box only the mask is cleaned; outside the box earlier cleaning stays.
+        let cleaned = crate::ImageCache::default()
+            .get(&snapshot, cleanup_entity, "source")
+            .await
+            .unwrap()
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(cleaned.get_pixel(2, 2).0[3], 0);
+        assert_eq!(cleaned.get_pixel(7, 7).0[3], 255);
+        assert_eq!(cleaned.get_pixel(14, 14).0, [200, 0, 0, 255]);
     }
 
     fn rectangle_region([left, top, right, bottom]: [u32; 4]) -> FlatFillRegion {

@@ -565,6 +565,8 @@
     "paintMask": "Нарисовать маску",
     "applyMask": "Применить",
     "cancelMask": "Отменить маску",
+    "undoMask": "Отменить штрих",
+    "clearMask": "Очистить маску",
     "brushSize": "Размер кисти",
     "brushSizeInput": "Размер кисти",
     "brushSizePixels": "Размер кисти: {{size}} пикс.",

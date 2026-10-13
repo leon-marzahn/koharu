@@ -565,6 +565,8 @@
     "paintMask": "Paint mask",
     "applyMask": "Apply",
     "cancelMask": "Cancel mask",
+    "undoMask": "Undo stroke",
+    "clearMask": "Clear mask",
     "brushSize": "Brush size",
     "brushSizeInput": "Brush size",
     "brushSizePixels": "Brush size: {{size}} pixels",

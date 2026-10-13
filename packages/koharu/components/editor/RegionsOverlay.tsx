@@ -1,6 +1,6 @@
 'use client'
 
-import { Brush, Check, ScanText, Trash2, X } from 'lucide-react'
+import { Brush, Check, Eraser, ScanText, Trash2, Undo2, X } from 'lucide-react'
 import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -85,8 +85,40 @@ export function RegionsOverlay({
   const brush = useKoharuStore((state) => state.brush)
   // Paint mask mode lives only in this overlay (no canvas edit is started), so cancelling
   // or leaving it cannot strand an active edit.
-  const [painting, setPainting] = useState<{ pointer: number | null; points: Point[] } | null>(null)
+  // `strokes` are only the new ones; `cleared` drops the stored mask so Apply replaces it.
+  const [painting, setPainting] = useState<{
+    pointer: number | null
+    strokes: Point[][]
+    cleared: boolean
+  } | null>(null)
+  const [storedMask, setStoredMask] = useState<{
+    url: string
+    width: number
+    height: number
+  } | null>(null)
   const paintFrame = region && painting ? paddedFrame(regionFrame(region)) : null
+  const paintingRegion = painting ? region?.id : undefined
+
+  // Show what is saved: the stored mask is a page-sized PNG, shown by its luminance.
+  useEffect(() => {
+    if (!paintingRegion) return
+    let live = true
+    let url: string | null = null
+    void call(commands.getPaintedMask, paintingRegion)
+      .then((bytes) => {
+        if (!live || !bytes.length) return
+        const png = new Uint8Array(bytes)
+        const header = new DataView(png.buffer) // IHDR: big-endian width, height at bytes 16, 20
+        url = URL.createObjectURL(new Blob([png], { type: 'image/png' }))
+        setStoredMask({ url, width: header.getUint32(16), height: header.getUint32(20) })
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+      setStoredMask(null)
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [paintingRegion])
   // ponytail: the backend clips again, so this clamp only keeps the preview honest.
   const clamp = (p: Point, f: Frame): Point => ({
     x: Math.min(Math.max(p.x, f.x), f.x + f.width),
@@ -94,19 +126,26 @@ export function RegionsOverlay({
   })
 
   const applyMask = () => {
-    if (!region || !painting?.points.length) return
-    const { points } = painting
+    if (!region || !painting?.strokes.length) return
+    const { strokes, cleared } = painting
     setPainting(null)
-    void call(commands.paintRegionMask, region.id, points, brush.diameter)
+    void call(commands.paintRegionMask, region.id, strokes, brush.diameter, cleared)
       .then(() => refresh(projectKey, pagesKey, pageKey))
       .catch(() => undefined)
   }
+
+  const undoStroke = () =>
+    setPainting((current) => current && { ...current, strokes: current.strokes.slice(0, -1) })
 
   const painted = painting !== null
   useEffect(() => {
     if (!painted) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setPainting(null)
+      else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        undoStroke()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -241,12 +280,36 @@ export function RegionsOverlay({
                 variant='secondary'
                 size='icon'
                 aria-label={t('tools.applyMask')}
-                disabled={!painting.points.length}
+                disabled={!painting.strokes.length}
                 className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={applyMask}
               >
                 <Check className='size-3.5' />
+              </Button>
+              <Button
+                type='button'
+                variant='secondary'
+                size='icon'
+                aria-label={t('tools.undoMask')}
+                disabled={!painting.strokes.length}
+                className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={undoStroke}
+              >
+                <Undo2 className='size-3.5' />
+              </Button>
+              <Button
+                type='button'
+                variant='secondary'
+                size='icon'
+                aria-label={t('tools.clearMask')}
+                disabled={painting.cleared && !painting.strokes.length}
+                className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setPainting({ ...painting, strokes: [], cleared: true })}
+              >
+                <Eraser className='size-3.5' />
               </Button>
               <Button
                 type='button'
@@ -268,7 +331,7 @@ export function RegionsOverlay({
               aria-label={t('tools.paintMask')}
               className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => setPainting({ pointer: null, points: [] })}
+              onClick={() => setPainting({ pointer: null, strokes: [], cleared: false })}
             >
               <Brush className='size-3.5' />
             </Button>
@@ -297,36 +360,62 @@ export function RegionsOverlay({
             const at = point(event)
             if (!at) return
             event.currentTarget.setPointerCapture?.(event.pointerId)
+            // Each press starts its own stroke: lifting the pen must not draw a connecting line.
             setPainting({
+              ...painting,
               pointer: event.pointerId,
-              points: [...painting.points, clamp(at, paintFrame)],
+              strokes: [...painting.strokes, [clamp(at, paintFrame)]],
             })
           }}
           onPointerMove={(event) => {
             const at = point(event)
             if (painting.pointer !== event.pointerId || !at) return
-            setPainting({ ...painting, points: [...painting.points, clamp(at, paintFrame)] })
+            const strokes = painting.strokes.slice()
+            strokes[strokes.length - 1] = [...strokes[strokes.length - 1], clamp(at, paintFrame)]
+            setPainting({ ...painting, strokes })
           }}
           onPointerUp={(event) => {
             if (painting.pointer === event.pointerId) setPainting({ ...painting, pointer: null })
           }}
           onPointerCancel={() => setPainting({ ...painting, pointer: null })}
         >
-          <svg className='pointer-events-none absolute inset-0 size-full'>
-            <polyline
-              fill='none'
-              stroke='var(--canvas-region-stroke)'
-              strokeOpacity={0.6}
-              strokeLinecap='round'
-              strokeLinejoin='round'
-              strokeWidth={brush.diameter * camera.zoom}
-              points={painting.points
-                .map(
-                  (p) =>
-                    `${(p.x - paintFrame.x) * camera.zoom},${(p.y - paintFrame.y) * camera.zoom}`,
-                )
-                .join(' ')}
+          {storedMask && !painting.cleared && (
+            <div
+              data-testid='region-stored-mask'
+              className='pointer-events-none absolute bg-[var(--canvas-region-stroke)] opacity-60'
+              style={{
+                left: -paintFrame.x * camera.zoom,
+                top: -paintFrame.y * camera.zoom,
+                width: storedMask.width * camera.zoom,
+                height: storedMask.height * camera.zoom,
+                maskImage: `url(${storedMask.url})`,
+                maskMode: 'luminance',
+                maskSize: '100% 100%',
+              }}
             />
+          )}
+          <svg className='pointer-events-none absolute inset-0 size-full'>
+            {painting.strokes.map((stroke, index) => {
+              // A lone point repeats so the round cap still draws a dot.
+              const path = stroke.length === 1 ? [stroke[0], stroke[0]] : stroke
+              return (
+                <polyline
+                  key={index}
+                  fill='none'
+                  stroke='var(--canvas-region-stroke)'
+                  strokeOpacity={0.6}
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={brush.diameter * camera.zoom}
+                  points={path
+                    .map(
+                      (p) =>
+                        `${(p.x - paintFrame.x) * camera.zoom},${(p.y - paintFrame.y) * camera.zoom}`,
+                    )
+                    .join(' ')}
+                />
+              )
+            })}
           </svg>
         </div>
       )}

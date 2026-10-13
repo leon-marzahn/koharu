@@ -565,6 +565,8 @@
     "paintMask": "绘制蒙版",
     "applyMask": "应用",
     "cancelMask": "取消蒙版",
+    "undoMask": "撤销笔画",
+    "clearMask": "清除蒙版",
     "brushSize": "画笔大小",
     "brushSizeInput": "画笔大小",
     "brushSizePixels": "画笔大小：{{size}} 像素",

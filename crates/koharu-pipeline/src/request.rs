@@ -14,6 +14,9 @@ use koharu_scene::EntityId;
 pub struct InpaintingMask {
     pub page: EntityId,
     pub png: Arc<[u8]>,
+    /// When set, the cleanup layer is cleared inside this box before inpainting, so the mask
+    /// replaces earlier cleaning there instead of merging into it.
+    pub restore: Option<crate::Bounds>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]

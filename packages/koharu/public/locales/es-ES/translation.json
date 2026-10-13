@@ -565,6 +565,8 @@
     "paintMask": "Pintar máscara",
     "applyMask": "Aplicar",
     "cancelMask": "Cancelar máscara",
+    "undoMask": "Deshacer trazo",
+    "clearMask": "Borrar máscara",
     "brushSize": "Tamaño del pincel",
     "brushSizeInput": "Tamaño del pincel",
     "brushSizePixels": "Tamaño del pincel: {{size}} píxeles",

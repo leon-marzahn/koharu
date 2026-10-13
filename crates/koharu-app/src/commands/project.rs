@@ -2066,6 +2066,86 @@ mod tests {
         assert_eq!(has_mask(&project), (false, false));
     }
 
+    /// Draw region, OCR and translate (pipeline writes), resize, paint a mask: every user edit
+    /// after the pipeline output must be accepted, and a second pipeline pass must not conflict.
+    #[tokio::test]
+    async fn resizing_a_translated_drawn_region_then_painting_a_mask_commits() {
+        use koharu_scene::{LanguageTag, OcrAnalysis, ProducerId, TextDirection};
+        let mut session = Session::memory().await.unwrap();
+        let mut edit = session.snapshot().edit();
+        let page = edit
+            .add_page(PageDraft::new("p", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(edit.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+        let (commit, region) = project
+            .add_text_region(page, Point { x: 10.0, y: 10.0 }, Point { x: 30.0, y: 30.0 })
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        let content = project
+            .snapshot()
+            .relations_to_as::<RecognizedFrom>(region)
+            .next()
+            .unwrap()
+            .value()
+            .source;
+
+        let pipeline_pass = |project: &Project| {
+            let generated = Generation::new(ProducerId::new("dev.koharu.pipeline.ocr").unwrap());
+            let mut edit = project.snapshot().edit_as(generated.clone());
+            edit.set(
+                content,
+                &SceneSourceText {
+                    text: Authored::generated("src".to_owned(), generated.clone()),
+                    language: LanguageTag::new("ja-JP").ok(),
+                },
+            )
+            .unwrap();
+            edit.set(
+                region,
+                &OcrAnalysis {
+                    origin: Origin::Generated(generated.clone()),
+                    direction: TextDirection::Horizontal,
+                    confidence: None,
+                    line_boundaries: Vec::new(),
+                },
+            )
+            .unwrap();
+            edit.set(
+                content,
+                &SceneTranslation {
+                    text: Authored::generated("hi".to_owned(), generated),
+                    language: LanguageTag::new("en-US").ok(),
+                },
+            )
+            .unwrap();
+            edit.finish().unwrap()
+        };
+        let commit = project.commit(pipeline_pass(&project)).await.unwrap();
+        project.record_commit(&commit);
+
+        let update = GeometryUpdate {
+            layer: region,
+            points: Some(vec![
+                Point { x: 5.0, y: 5.0 },
+                Point { x: 60.0, y: 5.0 },
+                Point { x: 60.0, y: 60.0 },
+                Point { x: 5.0, y: 60.0 },
+            ]),
+        };
+        let commit = project.set_region_geometry(vec![update]).await.unwrap();
+        project.record_commit(&commit);
+        let commit = project
+            .set_painted_mask(region, vec![1, 2, 3], 100, 100)
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        // Re-running OCR and translation after the user edits must also be accepted.
+        let commit = project.commit(pipeline_pass(&project)).await.unwrap();
+        project.record_commit(&commit);
+    }
+
     #[tokio::test]
     async fn deleting_a_region_removes_its_text_and_is_one_undo_step() {
         let mut session = Session::memory().await.unwrap();

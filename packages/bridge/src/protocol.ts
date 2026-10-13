@@ -97,10 +97,15 @@ export const commands = {
 	commitTransform: (expectedRevision: Revision, elements: TransformFrame[]) => __TAURI_INVOKE<number | null>("commit_transform", { expectedRevision, elements }).then((v) => (v==null?v:v as typeof v)),
 	commitInpaint: (expectedRevision: Revision, points: Point[], diameter: number) => __TAURI_INVOKE<string | null>("commit_inpaint", { expectedRevision, points: points.map(i=>i), diameter }),
 	/**
-	 *  Paint mask: stores the stroke as the region's own mask (one undo step) and inpaints it.
-	 *  Strokes are clipped here, to the region's padded box, whatever the client sent.
+	 *  Paint mask: stores the displayed mask as the region's own mask (one undo step) and repaints
+	 *  it. The displayed mask is the stored one plus `strokes`, or `strokes` alone with `replace`
+	 *  (the user cleared first). The region's padded box is reset to the original pixels before
+	 *  inpainting so a smaller mask un-cleans what the old one covered. Strokes are clipped here,
+	 *  to that box, whatever the client sent.
 	 */
-	paintRegionMask: (region: EntityId, points: Point[], diameter: number) => __TAURI_INVOKE<string | null>("paint_region_mask", { region, points: points.map(i=>i), diameter }),
+	paintRegionMask: (region: EntityId, strokes: Point[][], diameter: number, replace: boolean) => __TAURI_INVOKE<string | null>("paint_region_mask", { region, strokes: strokes.map(i=>i.map(i=>i)), diameter, replace }),
+	/**  The region's stored paint mask as a page-sized PNG; empty bytes when it was never painted. */
+	getPaintedMask: (region: EntityId) => __TAURI_INVOKE<CanvasBytes>("get_painted_mask", { region }),
 };
 
 /* Types */

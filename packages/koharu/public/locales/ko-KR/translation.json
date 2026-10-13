@@ -565,6 +565,8 @@
     "paintMask": "마스크 칠하기",
     "applyMask": "적용",
     "cancelMask": "마스크 취소",
+    "undoMask": "획 실행 취소",
+    "clearMask": "마스크 지우기",
     "brushSize": "브러시 크기",
     "brushSizeInput": "브러시 크기",
     "brushSizePixels": "브러시 크기: {{size}}픽셀",

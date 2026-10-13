@@ -565,6 +565,8 @@
     "paintMask": "マスクを描く",
     "applyMask": "適用",
     "cancelMask": "マスクを取り消す",
+    "undoMask": "ストロークを元に戻す",
+    "clearMask": "マスクを消去",
     "brushSize": "ブラシサイズ",
     "brushSizeInput": "ブラシサイズ",
     "brushSizePixels": "ブラシサイズ: {{size}}ピクセル",

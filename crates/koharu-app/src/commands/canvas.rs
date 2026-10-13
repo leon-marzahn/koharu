@@ -384,20 +384,25 @@ pub(crate) async fn commit_inpaint(
         )
     };
     let (png, bounds) =
-        tokio_rayon::spawn(move || encode_mask(width, height, &points, diameter, None)).await?;
-    Ok(Some(run_manual_inpaint(&handle, page, png, bounds).await?))
+        tokio_rayon::spawn(move || encode_mask(width, height, &[points], diameter, None)).await?;
+    Ok(Some(
+        run_manual_inpaint(&handle, page, png, bounds, None).await?,
+    ))
 }
 
-/// Inpaints exactly the pixels of a user-supplied page-sized mask, inside `bounds`.
+/// Inpaints exactly the pixels of a user-supplied page-sized mask, inside `bounds`. With
+/// `restore`, the cleanup layer is first reset to the original pixels inside that box.
 async fn run_manual_inpaint(
     handle: &AppHandle<CefRuntime>,
     page: EntityId,
     png: Vec<u8>,
     bounds: koharu_pipeline::Bounds,
+    restore: Option<koharu_pipeline::Bounds>,
 ) -> Result<JobId, Error> {
     *handle.state::<Processing>().inpainting_mask.lock() = Some(koharu_pipeline::InpaintingMask {
         page,
         png: Arc::from(png),
+        restore,
     });
     processing::process(
         handle.clone(),
@@ -412,33 +417,56 @@ async fn run_manual_inpaint(
     .await
 }
 
-/// Paint mask: stores the stroke as the region's own mask (one undo step) and inpaints it.
-/// Strokes are clipped here, to the region's padded box, whatever the client sent.
+/// The region's stored paint mask as a page-sized PNG; empty bytes when it was never painted.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn get_painted_mask(
+    region: EntityId,
+    project: State<'_, CurrentProject>,
+) -> Result<CanvasBytes, Error> {
+    let snapshot = {
+        let project = project.project.lock().await;
+        project.as_ref().context("no project is open")?.snapshot()
+    };
+    let role = koharu_scene::AssetRole::new("painted-mask")?;
+    let Some(asset) = snapshot.asset(region, &role)? else {
+        return Ok(CanvasBytes(Vec::new()));
+    };
+    Ok(CanvasBytes(snapshot.read_blob(asset.blob).await?.to_vec()))
+}
+
+/// Paint mask: stores the displayed mask as the region's own mask (one undo step) and repaints
+/// it. The displayed mask is the stored one plus `strokes`, or `strokes` alone with `replace`
+/// (the user cleared first). The region's padded box is reset to the original pixels before
+/// inpainting so a smaller mask un-cleans what the old one covered. Strokes are clipped here,
+/// to that box, whatever the client sent.
 #[tracing::instrument(
     target = "koharu_metrics",
     name = "region_mask_painted",
     skip_all,
-    fields(origin = "user", point_count = points.len(), size = f64::from(diameter)),
+    fields(origin = "user", stroke_count = strokes.len(), size = f64::from(diameter)),
 )]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn paint_region_mask(
     region: EntityId,
-    points: Vec<Point>,
+    strokes: Vec<Vec<Point>>,
     diameter: f32,
+    replace: bool,
     handle: AppHandle<CefRuntime>,
     project: State<'_, CurrentProject>,
 ) -> Result<Option<JobId>, Error> {
     if !diameter.is_finite()
         || diameter <= 0.0
-        || points.is_empty()
-        || points
+        || strokes.iter().all(Vec::is_empty)
+        || strokes
             .iter()
+            .flatten()
             .any(|point| !point.x.is_finite() || !point.y.is_finite())
     {
         return Err(anyhow!("a mask stroke needs a positive diameter and finite points").into());
     }
-    let (page, width, height, clip) = {
+    let (page, width, height, clip, stored) = {
         let project = project.project.lock().await;
         let project = project.as_ref().context("no project is open")?;
         let snapshot = project.snapshot();
@@ -454,18 +482,29 @@ pub(crate) async fn paint_region_mask(
             .iter()
             .map(|p| (p.x, p.y))
             .collect::<Vec<_>>();
+        let stored = match snapshot.asset(region, &koharu_scene::AssetRole::new("painted-mask")?)? {
+            Some(asset) if !replace => Some(snapshot.read_blob(asset.blob).await?),
+            _ => None,
+        };
         (
             page,
             width,
             height,
             koharu_pipeline::padded_box(width, height, &corners)?,
+            stored,
         )
     };
-    let Ok((png, bounds)) =
-        tokio_rayon::spawn(move || encode_mask(width, height, &points, diameter, Some(clip))).await
+    let Ok((png, _)) =
+        tokio_rayon::spawn(move || encode_mask(width, height, &strokes, diameter, Some(clip)))
+            .await
     else {
         return Ok(None); // the stroke fell entirely outside the region: nothing to store
     };
+    let png = match stored {
+        Some(stored) => tokio_rayon::spawn(move || union_masks(&stored, &png)).await?,
+        None => png,
+    };
+    let bounds = clip;
     {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
@@ -474,7 +513,29 @@ pub(crate) async fn paint_region_mask(
             .await?;
         project.record_commit(&commit);
     }
-    Ok(Some(run_manual_inpaint(&handle, page, png, bounds).await?))
+    Ok(Some(
+        run_manual_inpaint(&handle, page, png, bounds, Some(clip)).await?,
+    ))
+}
+
+/// Per-pixel maximum of two same-sized PNG masks.
+fn union_masks(a: &[u8], b: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let mut a = image::load_from_memory(a)?.to_luma8();
+    let b = image::load_from_memory(b)?.to_luma8();
+    if a.dimensions() != b.dimensions() {
+        bail!("stored mask does not match the page size");
+    }
+    for (pixel, other) in a.pixels_mut().zip(b.pixels()) {
+        pixel.0[0] = pixel.0[0].max(other.0[0]);
+    }
+    let mut png = Vec::new();
+    PngEncoder::new(&mut png).write_image(
+        a.as_raw(),
+        a.width(),
+        a.height(),
+        image::ExtendedColorType::L8,
+    )?;
+    Ok(png)
 }
 
 /// OCR + translate one region, then (optionally) clean it. Entity scope keeps neighbours
@@ -535,6 +596,7 @@ pub(crate) async fn process_region(
     *handle.state::<Processing>().inpainting_mask.lock() = Some(koharu_pipeline::InpaintingMask {
         page,
         png: Arc::from(png),
+        restore: None,
     });
     processing::process(
         handle.clone(),
@@ -575,7 +637,23 @@ fn rect_mask(
 
 #[cfg(test)]
 mod region_mask_tests {
-    use super::{Point, encode_mask, rect_mask};
+    use super::{Point, encode_mask, rect_mask, union_masks};
+
+    #[test]
+    fn union_keeps_both_masks() {
+        let a = encode_mask(20, 20, &[vec![Point { x: 3.5, y: 3.5 }]], 2.0, None)
+            .unwrap()
+            .0;
+        let b = encode_mask(20, 20, &[vec![Point { x: 15.5, y: 15.5 }]], 2.0, None)
+            .unwrap()
+            .0;
+        let mask = image::load_from_memory(&union_masks(&a, &b).unwrap())
+            .unwrap()
+            .to_luma8();
+        assert_eq!(mask.get_pixel(3, 3).0[0], 255);
+        assert_eq!(mask.get_pixel(15, 15).0[0], 255);
+        assert_eq!(mask.get_pixel(9, 9).0[0], 0);
+    }
 
     #[test]
     fn strokes_are_clipped_to_the_region_box() {
@@ -586,14 +664,27 @@ mod region_mask_tests {
             height: 10.0,
         };
         let line = [Point { x: 0.0, y: 15.0 }, Point { x: 40.0, y: 15.0 }];
-        let (png, bounds) = encode_mask(50, 50, &line, 4.0, Some(clip)).unwrap();
+        let (png, bounds) = encode_mask(50, 50, &[line.to_vec()], 4.0, Some(clip)).unwrap();
         let mask = image::load_from_memory(&png).unwrap().to_luma8();
         assert_eq!(mask.get_pixel(15, 15).0[0], 255);
         assert_eq!(mask.get_pixel(5, 15).0[0], 0);
         assert_eq!(mask.get_pixel(30, 15).0[0], 0);
         assert!(bounds.x >= 10.0 && bounds.x + bounds.width <= 20.0);
         let outside = [Point { x: 40.0, y: 40.0 }];
-        assert!(encode_mask(50, 50, &outside, 4.0, Some(clip)).is_err());
+        assert!(encode_mask(50, 50, &[outside.to_vec()], 4.0, Some(clip)).is_err());
+    }
+
+    #[test]
+    fn separate_strokes_are_not_joined() {
+        let strokes = [
+            vec![Point { x: 5.0, y: 5.0 }, Point { x: 5.0, y: 6.0 }],
+            vec![Point { x: 45.0, y: 5.0 }, Point { x: 45.0, y: 6.0 }],
+        ];
+        let (png, _) = encode_mask(50, 50, &strokes, 2.0, None).unwrap();
+        let mask = image::load_from_memory(&png).unwrap().to_luma8();
+        assert_eq!(mask.get_pixel(5, 5).0[0], 255);
+        assert_eq!(mask.get_pixel(45, 5).0[0], 255);
+        assert_eq!(mask.get_pixel(25, 5).0[0], 0);
     }
 
     #[test]
@@ -626,7 +717,7 @@ fn ensure_revision(actual: Revision, expected: Revision) -> anyhow::Result<()> {
 fn encode_mask(
     width: u32,
     height: u32,
-    points: &[Point],
+    strokes: &[Vec<Point>],
     diameter: f32,
     clip: Option<koharu_pipeline::Bounds>,
 ) -> anyhow::Result<(Vec<u8>, koharu_pipeline::Bounds)> {
@@ -645,11 +736,13 @@ fn encode_mask(
     let mut image = GrayImage::new(width, height);
     let radius = f64::from(diameter) * 0.5;
     let mut dirty = None::<[u32; 4]>;
-    for (start, end) in points
-        .iter()
-        .zip(points.iter().skip(1))
-        .chain(points.last().map(|point| (point, point)))
-    {
+    // Each stroke is its own polyline: lifting the pen never draws a connecting segment.
+    for (start, end) in strokes.iter().flat_map(|points| {
+        points
+            .iter()
+            .zip(points.iter().skip(1))
+            .chain(points.last().map(|point| (point, point)))
+    }) {
         let left = ((start.x.min(end.x) - radius - 0.5).floor().max(0.0) as u32).max(clip[0]);
         let top = ((start.y.min(end.y) - radius - 0.5).floor().max(0.0) as u32).max(clip[1]);
         let right = ((start.x.max(end.x) + radius + 0.5)

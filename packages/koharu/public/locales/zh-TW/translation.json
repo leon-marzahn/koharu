@@ -565,6 +565,8 @@
     "paintMask": "繪製遮罩",
     "applyMask": "套用",
     "cancelMask": "取消遮罩",
+    "undoMask": "復原筆劃",
+    "clearMask": "清除遮罩",
     "brushSize": "筆刷大小",
     "brushSizeInput": "筆刷大小",
     "brushSizePixels": "筆刷大小：{{size}} 像素",
