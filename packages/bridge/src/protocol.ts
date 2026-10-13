@@ -96,6 +96,11 @@ export const commands = {
 	commitErase: (expectedRevision: Revision, layer: EntityId, points: Point[], diameter: number) => __TAURI_INVOKE<LayerCommit>("commit_erase", { expectedRevision, layer, points: points.map(i=>i), diameter }),
 	commitTransform: (expectedRevision: Revision, elements: TransformFrame[]) => __TAURI_INVOKE<number | null>("commit_transform", { expectedRevision, elements }).then((v) => (v==null?v:v as typeof v)),
 	commitInpaint: (expectedRevision: Revision, points: Point[], diameter: number) => __TAURI_INVOKE<string | null>("commit_inpaint", { expectedRevision, points: points.map(i=>i), diameter }),
+	/**
+	 *  Paint mask: stores the stroke as the region's own mask (one undo step) and inpaints it.
+	 *  Strokes are clipped here, to the region's padded box, whatever the client sent.
+	 */
+	paintRegionMask: (region: EntityId, points: Point[], diameter: number) => __TAURI_INVOKE<string | null>("paint_region_mask", { region, points: points.map(i=>i), diameter }),
 };
 
 /* Types */

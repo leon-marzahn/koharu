@@ -1158,6 +1158,54 @@ describe('greenfield editor', () => {
       expect(process).toHaveBeenCalledWith('region-1', false)
     })
 
+    describe('paint mask', () => {
+      // The region box is (10,10)-(60,40); strokes are clipped to it padded by 2 px.
+      const start = async () => {
+        const user = userEvent.setup()
+        setup()
+        const paint = vi.spyOn(commands, 'paintRegionMask').mockResolvedValue('job')
+        await user.click(screen.getByTestId('region-region-1'))
+        await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
+        return { user, paint, surface: screen.getByTestId('region-paint-surface') }
+      }
+
+      it('clips the stroke to the padded region and applies it', async () => {
+        const { user, paint, surface } = await start()
+        fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 20, clientY: 25 })
+        fireEvent.pointerMove(surface, { pointerId: 1, clientX: 200, clientY: -50 })
+        fireEvent.pointerUp(surface, { pointerId: 1, clientX: 200, clientY: -50 })
+        await user.click(screen.getByRole('button', { name: 'Apply', hidden: true }))
+        expect(paint).toHaveBeenCalledTimes(1)
+        const [region, points] = paint.mock.calls[0]
+        expect(region).toBe('region-1')
+        expect(points.length).toBeGreaterThan(1)
+        for (const p of points) {
+          expect(p.x).toBeGreaterThanOrEqual(8)
+          expect(p.x).toBeLessThanOrEqual(62)
+          expect(p.y).toBeGreaterThanOrEqual(8)
+          expect(p.y).toBeLessThanOrEqual(42)
+        }
+        expect(screen.queryByTestId('region-paint-surface')).not.toBeInTheDocument()
+      })
+
+      it('cancels with Escape without applying anything', async () => {
+        const { paint, surface } = await start()
+        fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 20, clientY: 25 })
+        fireEvent.pointerUp(surface, { pointerId: 1, clientX: 20, clientY: 25 })
+        fireEvent.keyDown(window, { key: 'Escape' })
+        expect(screen.queryByTestId('region-paint-surface')).not.toBeInTheDocument()
+        expect(paint).not.toHaveBeenCalled()
+      })
+
+      it('does not apply an empty stroke', async () => {
+        const { user, paint } = await start()
+        const apply = screen.getByRole('button', { name: 'Apply', hidden: true })
+        expect(apply).toBeDisabled()
+        await user.click(apply)
+        expect(paint).not.toHaveBeenCalled()
+      })
+    })
+
     it('offsets the controls on a wrapper so pressing a button cannot move it', async () => {
       const user = userEvent.setup()
       setup()

@@ -165,6 +165,21 @@ impl Component for StalePage {
     }
 }
 
+/// Marks a region whose "painted-mask" asset is the user's own page-sized inpainting mask.
+/// User-authored: the pipeline never writes it. Moving or resizing the region removes it
+/// (with the asset), because the mask was painted over the old box.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct PaintedMask {}
+
+impl Component for PaintedMask {
+    const KIND: &'static str = "dev.koharu.painted-mask";
+
+    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        Ok(())
+    }
+}
+
 /// The user's own workflow label for a page. Absent means Todo, so only InProgress and
 /// Done are stored. User-authored: the pipeline never writes it and nothing resets it.
 #[revisioned(revision = 1)]

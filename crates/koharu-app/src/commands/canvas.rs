@@ -384,24 +384,97 @@ pub(crate) async fn commit_inpaint(
         )
     };
     let (png, bounds) =
-        tokio_rayon::spawn(move || encode_mask(width, height, &points, diameter)).await?;
+        tokio_rayon::spawn(move || encode_mask(width, height, &points, diameter, None)).await?;
+    Ok(Some(run_manual_inpaint(&handle, page, png, bounds).await?))
+}
+
+/// Inpaints exactly the pixels of a user-supplied page-sized mask, inside `bounds`.
+async fn run_manual_inpaint(
+    handle: &AppHandle<CefRuntime>,
+    page: EntityId,
+    png: Vec<u8>,
+    bounds: koharu_pipeline::Bounds,
+) -> Result<JobId, Error> {
     *handle.state::<Processing>().inpainting_mask.lock() = Some(koharu_pipeline::InpaintingMask {
         page,
         png: Arc::from(png),
     });
-    Ok(Some(
-        processing::process(
-            handle.clone(),
-            koharu_pipeline::Scope::Region { page, bounds },
-            koharu_pipeline::Operation::Only {
-                stage: koharu_pipeline::Stage::Inpainting,
-            },
-            handle.state::<CurrentProject>(),
-            handle.state::<Processing>(),
-            handle.state::<JobChannel>(),
+    processing::process(
+        handle.clone(),
+        koharu_pipeline::Scope::Region { page, bounds },
+        koharu_pipeline::Operation::Only {
+            stage: koharu_pipeline::Stage::Inpainting,
+        },
+        handle.state::<CurrentProject>(),
+        handle.state::<Processing>(),
+        handle.state::<JobChannel>(),
+    )
+    .await
+}
+
+/// Paint mask: stores the stroke as the region's own mask (one undo step) and inpaints it.
+/// Strokes are clipped here, to the region's padded box, whatever the client sent.
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "region_mask_painted",
+    skip_all,
+    fields(origin = "user", point_count = points.len(), size = f64::from(diameter)),
+)]
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn paint_region_mask(
+    region: EntityId,
+    points: Vec<Point>,
+    diameter: f32,
+    handle: AppHandle<CefRuntime>,
+    project: State<'_, CurrentProject>,
+) -> Result<Option<JobId>, Error> {
+    if !diameter.is_finite()
+        || diameter <= 0.0
+        || points.is_empty()
+        || points
+            .iter()
+            .any(|point| !point.x.is_finite() || !point.y.is_finite())
+    {
+        return Err(anyhow!("a mask stroke needs a positive diameter and finite points").into());
+    }
+    let (page, width, height, clip) = {
+        let project = project.project.lock().await;
+        let project = project.as_ref().context("no project is open")?;
+        let snapshot = project.snapshot();
+        let page = project
+            .active_page()
+            .context("the project has no active page")?;
+        let size = snapshot.page(page)?.page()?;
+        let (width, height) = (size.width.round() as u32, size.height.round() as u32);
+        let corners = snapshot
+            .component::<Geometry>(region)?
+            .context("the region has no geometry")?
+            .points
+            .iter()
+            .map(|p| (p.x, p.y))
+            .collect::<Vec<_>>();
+        (
+            page,
+            width,
+            height,
+            koharu_pipeline::padded_box(width, height, &corners)?,
         )
-        .await?,
-    ))
+    };
+    let Ok((png, bounds)) =
+        tokio_rayon::spawn(move || encode_mask(width, height, &points, diameter, Some(clip))).await
+    else {
+        return Ok(None); // the stroke fell entirely outside the region: nothing to store
+    };
+    {
+        let mut project = project.project.lock().await;
+        let project = project.as_mut().context("no project is open")?;
+        let commit = project
+            .set_painted_mask(region, png.clone(), width, height)
+            .await?;
+        project.record_commit(&commit);
+    }
+    Ok(Some(run_manual_inpaint(&handle, page, png, bounds).await?))
 }
 
 /// OCR + translate one region, then (optionally) clean it. Entity scope keeps neighbours
@@ -483,26 +556,10 @@ fn rect_mask(
     height: u32,
     points: &[(f64, f64)],
 ) -> anyhow::Result<(Vec<u8>, koharu_pipeline::Bounds)> {
-    const PAD: f64 = 2.0;
-    if width == 0 || height == 0 || points.is_empty() {
-        bail!("page and region must be non-empty");
-    }
-    let fold = |pick: fn(f64, f64) -> f64, i: usize, init: f64| {
-        points
-            .iter()
-            .map(|p| if i == 0 { p.0 } else { p.1 })
-            .fold(init, pick)
-    };
-    let left = (fold(f64::min, 0, f64::MAX) - PAD).floor().max(0.0) as u32;
-    let top = (fold(f64::min, 1, f64::MAX) - PAD).floor().max(0.0) as u32;
-    let right = ((fold(f64::max, 0, f64::MIN) + PAD).ceil().max(0.0) as u32).min(width);
-    let bottom = ((fold(f64::max, 1, f64::MIN) + PAD).ceil().max(0.0) as u32).min(height);
-    if left >= right || top >= bottom {
-        bail!("the region is outside the page");
-    }
+    let bounds = koharu_pipeline::padded_box(width, height, points)?;
     let mut image = GrayImage::new(width, height);
-    for y in top..bottom {
-        for x in left..right {
+    for y in bounds.y as u32..(bounds.y + bounds.height) as u32 {
+        for x in bounds.x as u32..(bounds.x + bounds.width) as u32 {
             image.put_pixel(x, y, image::Luma([255]));
         }
     }
@@ -513,20 +570,31 @@ fn rect_mask(
         height,
         image::ExtendedColorType::L8,
     )?;
-    Ok((
-        png,
-        koharu_pipeline::Bounds {
-            x: f64::from(left),
-            y: f64::from(top),
-            width: f64::from(right - left),
-            height: f64::from(bottom - top),
-        },
-    ))
+    Ok((png, bounds))
 }
 
 #[cfg(test)]
 mod region_mask_tests {
-    use super::rect_mask;
+    use super::{Point, encode_mask, rect_mask};
+
+    #[test]
+    fn strokes_are_clipped_to_the_region_box() {
+        let clip = koharu_pipeline::Bounds {
+            x: 10.0,
+            y: 10.0,
+            width: 10.0,
+            height: 10.0,
+        };
+        let line = [Point { x: 0.0, y: 15.0 }, Point { x: 40.0, y: 15.0 }];
+        let (png, bounds) = encode_mask(50, 50, &line, 4.0, Some(clip)).unwrap();
+        let mask = image::load_from_memory(&png).unwrap().to_luma8();
+        assert_eq!(mask.get_pixel(15, 15).0[0], 255);
+        assert_eq!(mask.get_pixel(5, 15).0[0], 0);
+        assert_eq!(mask.get_pixel(30, 15).0[0], 0);
+        assert!(bounds.x >= 10.0 && bounds.x + bounds.width <= 20.0);
+        let outside = [Point { x: 40.0, y: 40.0 }];
+        assert!(encode_mask(50, 50, &outside, 4.0, Some(clip)).is_err());
+    }
 
     #[test]
     fn rect_mask_covers_the_padded_box_and_clamps_to_the_page() {
@@ -560,10 +628,20 @@ fn encode_mask(
     height: u32,
     points: &[Point],
     diameter: f32,
+    clip: Option<koharu_pipeline::Bounds>,
 ) -> anyhow::Result<(Vec<u8>, koharu_pipeline::Bounds)> {
     if width == 0 || height == 0 {
         bail!("page dimensions must be positive");
     }
+    // Pixels outside `clip` stay unpainted; whole page when absent.
+    let clip = clip.map_or([0, 0, width, height], |c| {
+        [
+            c.x as u32,
+            c.y as u32,
+            ((c.x + c.width) as u32).min(width),
+            ((c.y + c.height) as u32).min(height),
+        ]
+    });
     let mut image = GrayImage::new(width, height);
     let radius = f64::from(diameter) * 0.5;
     let mut dirty = None::<[u32; 4]>;
@@ -572,14 +650,16 @@ fn encode_mask(
         .zip(points.iter().skip(1))
         .chain(points.last().map(|point| (point, point)))
     {
-        let left = (start.x.min(end.x) - radius - 0.5).floor().max(0.0) as u32;
-        let top = (start.y.min(end.y) - radius - 0.5).floor().max(0.0) as u32;
-        let right = (start.x.max(end.x) + radius + 0.5)
+        let left = ((start.x.min(end.x) - radius - 0.5).floor().max(0.0) as u32).max(clip[0]);
+        let top = ((start.y.min(end.y) - radius - 0.5).floor().max(0.0) as u32).max(clip[1]);
+        let right = ((start.x.max(end.x) + radius + 0.5)
             .ceil()
-            .min(f64::from(width)) as u32;
-        let bottom = (start.y.max(end.y) + radius + 0.5)
+            .min(f64::from(width)) as u32)
+            .min(clip[2]);
+        let bottom = ((start.y.max(end.y) + radius + 0.5)
             .ceil()
-            .min(f64::from(height)) as u32;
+            .min(f64::from(height)) as u32)
+            .min(clip[3]);
         let dx = end.x - start.x;
         let dy = end.y - start.y;
         let length_squared = dx.mul_add(dx, dy * dy);

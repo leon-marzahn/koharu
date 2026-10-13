@@ -1,6 +1,6 @@
 'use client'
 
-import { ScanText, Trash2 } from 'lucide-react'
+import { Brush, Check, ScanText, Trash2, X } from 'lucide-react'
 import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -26,6 +26,18 @@ function regionFrame({ geometry }: AnalysisRegion): Frame {
   const x = Math.min(...xs)
   const y = Math.min(...ys)
   return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y, angle_degrees: 0 }
+}
+
+// A painted mask may reach 2 px past the region box: the padding the backend cleans with.
+const PAINT_PAD = 2
+function paddedFrame(frame: Frame): Frame {
+  return {
+    ...frame,
+    x: frame.x - PAINT_PAD,
+    y: frame.y - PAINT_PAD,
+    width: frame.width + PAINT_PAD * 2,
+    height: frame.height + PAINT_PAD * 2,
+  }
 }
 
 function framePoints({ x, y, width, height, angle_degrees }: Frame) {
@@ -70,6 +82,35 @@ export function RegionsOverlay({
   const drawing = useKoharuStore((state) => state.drawRegion)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const [sketch, setSketch] = useState<{ pointer: number; from: Point; to: Point } | null>(null)
+  const brush = useKoharuStore((state) => state.brush)
+  // Paint mask mode lives only in this overlay (no canvas edit is started), so cancelling
+  // or leaving it cannot strand an active edit.
+  const [painting, setPainting] = useState<{ pointer: number | null; points: Point[] } | null>(null)
+  const paintFrame = region && painting ? paddedFrame(regionFrame(region)) : null
+  // ponytail: the backend clips again, so this clamp only keeps the preview honest.
+  const clamp = (p: Point, f: Frame): Point => ({
+    x: Math.min(Math.max(p.x, f.x), f.x + f.width),
+    y: Math.min(Math.max(p.y, f.y), f.y + f.height),
+  })
+
+  const applyMask = () => {
+    if (!region || !painting?.points.length) return
+    const { points } = painting
+    setPainting(null)
+    void call(commands.paintRegionMask, region.id, points, brush.diameter)
+      .then(() => refresh(projectKey, pagesKey, pageKey))
+      .catch(() => undefined)
+  }
+
+  const painted = painting !== null
+  useEffect(() => {
+    if (!painted) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPainting(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [painted])
 
   // Deleting a region also deletes the text box recognized from it (one undo step).
   const remove = (id: EntityId) => {
@@ -145,6 +186,7 @@ export function RegionsOverlay({
             onPointerDown={(event) => {
               if (event.button !== 0) return
               event.stopPropagation()
+              setPainting(null)
               setSelected(item.id)
               selectLayers([]) // so Delete targets the region, not a selected text layer
               const start = point(event)
@@ -192,6 +234,45 @@ export function RegionsOverlay({
           >
             <ScanText className='size-3.5' />
           </Button>
+          {painting ? (
+            <>
+              <Button
+                type='button'
+                variant='secondary'
+                size='icon'
+                aria-label={t('tools.applyMask')}
+                disabled={!painting.points.length}
+                className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={applyMask}
+              >
+                <Check className='size-3.5' />
+              </Button>
+              <Button
+                type='button'
+                variant='secondary'
+                size='icon'
+                aria-label={t('tools.cancelMask')}
+                className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setPainting(null)}
+              >
+                <X className='size-3.5' />
+              </Button>
+            </>
+          ) : (
+            <Button
+              type='button'
+              variant='secondary'
+              size='icon'
+              aria-label={t('tools.paintMask')}
+              className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setPainting({ pointer: null, points: [] })}
+            >
+              <Brush className='size-3.5' />
+            </Button>
+          )}
           <Button
             type='button'
             variant='secondary'
@@ -203,6 +284,50 @@ export function RegionsOverlay({
           >
             <Trash2 className='size-3.5' />
           </Button>
+        </div>
+      )}
+      {painting && paintFrame && (
+        <div
+          data-testid='region-paint-surface'
+          className='pointer-events-auto absolute cursor-crosshair touch-none overflow-hidden'
+          style={{ ...cssFrame(paintFrame, camera), transform: undefined }}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return
+            event.stopPropagation()
+            const at = point(event)
+            if (!at) return
+            event.currentTarget.setPointerCapture?.(event.pointerId)
+            setPainting({
+              pointer: event.pointerId,
+              points: [...painting.points, clamp(at, paintFrame)],
+            })
+          }}
+          onPointerMove={(event) => {
+            const at = point(event)
+            if (painting.pointer !== event.pointerId || !at) return
+            setPainting({ ...painting, points: [...painting.points, clamp(at, paintFrame)] })
+          }}
+          onPointerUp={(event) => {
+            if (painting.pointer === event.pointerId) setPainting({ ...painting, pointer: null })
+          }}
+          onPointerCancel={() => setPainting({ ...painting, pointer: null })}
+        >
+          <svg className='pointer-events-none absolute inset-0 size-full'>
+            <polyline
+              fill='none'
+              stroke='var(--canvas-region-stroke)'
+              strokeOpacity={0.6}
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              strokeWidth={brush.diameter * camera.zoom}
+              points={painting.points
+                .map(
+                  (p) =>
+                    `${(p.x - paintFrame.x) * camera.zoom},${(p.y - paintFrame.y) * camera.zoom}`,
+                )
+                .join(' ')}
+            />
+          </svg>
         </div>
       )}
       {drawing && (

@@ -20,6 +20,34 @@ pub struct Bounds {
     pub height: f64,
 }
 
+/// Bounding box of `points`, padded by 2 px and clamped to the page. The one rule for the
+/// area a user-drawn region cleans when it has no painted mask.
+pub fn padded_box(width: u32, height: u32, points: &[(f64, f64)]) -> Result<Bounds> {
+    const PAD: f64 = 2.0;
+    if width == 0 || height == 0 || points.is_empty() {
+        bail!("page and region must be non-empty");
+    }
+    let fold = |pick: fn(f64, f64) -> f64, i: usize, init: f64| {
+        points
+            .iter()
+            .map(|p| if i == 0 { p.0 } else { p.1 })
+            .fold(init, pick)
+    };
+    let left = (fold(f64::min, 0, f64::MAX) - PAD).floor().max(0.0) as u32;
+    let top = (fold(f64::min, 1, f64::MAX) - PAD).floor().max(0.0) as u32;
+    let right = ((fold(f64::max, 0, f64::MIN) + PAD).ceil().max(0.0) as u32).min(width);
+    let bottom = ((fold(f64::max, 1, f64::MIN) + PAD).ceil().max(0.0) as u32).min(height);
+    if left >= right || top >= bottom {
+        bail!("the region is outside the page");
+    }
+    Ok(Bounds {
+        x: f64::from(left),
+        y: f64::from(top),
+        width: f64::from(right - left),
+        height: f64::from(bottom - top),
+    })
+}
+
 impl Bounds {
     fn validate(self) -> Result<()> {
         if self.x.is_finite()

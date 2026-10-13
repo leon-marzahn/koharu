@@ -19,7 +19,7 @@ use koharu_ml::{
 };
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, BubbleRegion, EntityOrigin, Geometry, Origin,
-    RasterLayer, RasterLayerKind, Region, RegionSpec,
+    RasterLayer, RasterLayerKind, Region, RegionSpec, TextRegion,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -492,6 +492,9 @@ async fn prepare(input: &StageInput) -> Result<InpaintInput> {
             }
         }
     }
+    if input.inpainting_mask.is_none() {
+        add_user_regions(input, &mut mask).await?;
+    }
     if let Some(bounds) = input.region {
         for (x, y, pixel) in mask.enumerate_pixels_mut() {
             if f64::from(x + 1) <= bounds.x
@@ -514,6 +517,52 @@ async fn prepare(input: &StageInput) -> Result<InpaintInput> {
         text_mask,
         flat_fill_regions,
     })
+}
+
+/// The detector never saw user-drawn text regions, so the stage adds them itself: the
+/// region's painted mask if it has one, else its padded box (the same rule Draw region uses).
+async fn add_user_regions(input: &StageInput, mask: &mut GrayImage) -> Result<()> {
+    let painted_role = AssetRole::new("painted-mask")?;
+    for entity in input.scene.descendants(input.page)? {
+        let id = entity.id();
+        let is_user_text = input.scene.component::<Region>(id)?.is_some_and(|region| {
+            region.origin == Origin::User && region.kind == TextRegion::kind()
+        });
+        if !is_user_text || !input.contains_entity(id)? {
+            continue;
+        }
+        if input.scene.asset(id, &painted_role)?.is_some()
+            && let Some(painted) = input.images.get(&input.scene, id, "painted-mask").await?
+        {
+            let painted = painted.to_luma8();
+            ensure!(
+                painted.dimensions() == mask.dimensions(),
+                "painted mask dimensions do not match page {}",
+                input.page
+            );
+            for (target, source) in mask.iter_mut().zip(painted.as_raw()) {
+                *target = (*target).max(*source);
+            }
+            continue;
+        }
+        let Some(geometry) = input.scene.component::<Geometry>(id)? else {
+            continue;
+        };
+        let points = geometry
+            .points
+            .iter()
+            .map(|p| (p.x, p.y))
+            .collect::<Vec<_>>();
+        let Ok(rect) = crate::scope::padded_box(mask.width(), mask.height(), &points) else {
+            continue; // entirely off the page
+        };
+        for y in rect.y as u32..(rect.y + rect.height) as u32 {
+            for x in rect.x as u32..(rect.x + rect.width) as u32 {
+                mask.put_pixel(x, y, Luma([255]));
+            }
+        }
+    }
+    Ok(())
 }
 
 const TILE_SIZE: u32 = 512;
@@ -1015,6 +1064,126 @@ mod tests {
 
         assert!(processor.skip(&automatic).unwrap());
         assert!(!processor.skip(&manual).unwrap());
+    }
+
+    fn encode_png(image: &DynamicImage) -> Arc<[u8]> {
+        let mut bytes = Cursor::new(Vec::new());
+        image.write_to(&mut bytes, ImageFormat::Png).unwrap();
+        Arc::from(bytes.into_inner())
+    }
+
+    fn png_asset(image: &DynamicImage) -> AssetInput {
+        AssetInput::new(
+            encode_png(image),
+            "image/png",
+            AssetMetadata {
+                width: Some(image.width()),
+                height: Some(image.height()),
+                attributes: BTreeMap::new(),
+            },
+        )
+    }
+
+    /// A 16x16 page with no detector mask, a user-drawn text region at (6,6) 4x4, and a
+    /// second user region far away at (0,12) 2x2 (inside the scope only when requested).
+    async fn page_with_user_regions(
+        painted: Option<&DynamicImage>,
+    ) -> (
+        koharu_scene::Snapshot,
+        koharu_scene::EntityId,
+        [koharu_scene::EntityId; 2],
+    ) {
+        use koharu_scene::{PaintedMask, TextRegion};
+        let mut session = koharu_scene::Session::memory().await.unwrap();
+        let mut ids = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(
+                    koharu_scene::PageDraft::new("page", 16.0, 16.0),
+                    koharu_scene::At::End,
+                )?;
+                edit.set_asset(
+                    page,
+                    &AssetRole::new("source")?,
+                    png_asset(&DynamicImage::new_rgb8(16, 16)),
+                )?;
+                let near = edit.add_analysis_region::<TextRegion>(
+                    page,
+                    koharu_scene::At::End,
+                    &Geometry::rectangle(6.0, 6.0, 4.0, 4.0),
+                    None,
+                )?;
+                let far = edit.add_analysis_region::<TextRegion>(
+                    page,
+                    koharu_scene::At::End,
+                    &Geometry::rectangle(0.0, 12.0, 2.0, 2.0),
+                    None,
+                )?;
+                if let Some(mask) = painted {
+                    edit.set(near, &PaintedMask {})?;
+                    edit.set_asset(near, &AssetRole::new("painted-mask")?, png_asset(mask))?;
+                }
+                ids = Some((page, [near, far]));
+                Ok(())
+            })
+            .unwrap();
+        let snapshot = session.commit(patch).await.unwrap().snapshot;
+        let (page, regions) = ids.unwrap();
+        (snapshot, page, regions)
+    }
+
+    fn automatic_input(
+        snapshot: koharu_scene::Snapshot,
+        page: koharu_scene::EntityId,
+        entities: Option<std::collections::BTreeSet<koharu_scene::EntityId>>,
+    ) -> StageInput {
+        StageInput::new(
+            snapshot,
+            page,
+            entities.map(Arc::new),
+            None,
+            Arc::new(crate::ImageCache::default()),
+            None,
+        )
+    }
+
+    #[tokio::test]
+    async fn drawn_regions_are_inpainted_without_a_detector_mask() {
+        let (snapshot, page, _) = page_with_user_regions(None).await;
+        let prepared = prepare(&automatic_input(snapshot, page, None))
+            .await
+            .unwrap();
+        // Padded by 2 px: (4..12, 4..12) and (0..4, 10..16).
+        assert_eq!(prepared.mask.get_pixel(4, 4), &Luma([255]));
+        assert_eq!(prepared.mask.get_pixel(11, 11), &Luma([255]));
+        assert_eq!(prepared.mask.get_pixel(12, 12), &Luma([0]));
+        assert_eq!(prepared.mask.get_pixel(0, 12), &Luma([255]));
+    }
+
+    #[tokio::test]
+    async fn regions_outside_the_run_scope_are_not_inpainted() {
+        let (snapshot, page, [near, _]) = page_with_user_regions(None).await;
+        let scope = std::collections::BTreeSet::from([near]);
+        let prepared = prepare(&automatic_input(snapshot, page, Some(scope)))
+            .await
+            .unwrap();
+        assert_eq!(prepared.mask.get_pixel(6, 6), &Luma([255]));
+        assert_eq!(prepared.mask.get_pixel(0, 12), &Luma([0]));
+    }
+
+    #[tokio::test]
+    async fn a_painted_mask_replaces_the_box_fallback() {
+        let mut painted = GrayImage::new(16, 16);
+        painted.put_pixel(7, 7, Luma([255]));
+        let (snapshot, page, _) =
+            page_with_user_regions(Some(&DynamicImage::ImageLuma8(painted))).await;
+        let prepared = prepare(&automatic_input(snapshot, page, None))
+            .await
+            .unwrap();
+        assert_eq!(prepared.mask.get_pixel(7, 7), &Luma([255]));
+        assert_eq!(prepared.mask.get_pixel(5, 5), &Luma([0]));
+        assert_eq!(prepared.mask.get_pixel(0, 12), &Luma([255]));
     }
 
     fn rectangle_region([left, top, right, bottom]: [u32; 4]) -> FlatFillRegion {

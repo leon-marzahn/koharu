@@ -10,12 +10,12 @@ use koharu_desktop::Frame;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Character, CharacterSheet, Commit,
     EntityId, EntityOrigin, FIT_SCALE, FitsTo, FlowsIn, Geometry as SceneGeometry,
-    Group as SceneGroup, Origin, PageDraft, PageStatus, Point as ScenePoint, Presents, Proposals,
-    RasterLayer as SceneRasterLayer, RasterLayerKind, RecognizedFrom, Region as SceneRegion,
-    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText, StalePage, Term,
-    TermList, TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
-    TextRegion, Translation as SceneTranslation, Typography as SceneTypography,
-    Visibility as SceneVisibility,
+    Group as SceneGroup, Origin, PageDraft, PageStatus, PaintedMask, Point as ScenePoint, Presents,
+    Proposals, RasterLayer as SceneRasterLayer, RasterLayerKind, RecognizedFrom,
+    Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
+    SourceText as SceneSourceText, StalePage, Term, TermList, TextGroup as SceneTextGroup,
+    TextLayout as SceneTextLayout, TextLayoutKind, TextRegion, Translation as SceneTranslation,
+    Typography as SceneTypography, Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
@@ -746,8 +746,42 @@ impl Project {
                 for &target in targets {
                     edit.set(target, geometry)?;
                 }
+                // A mask painted for the old box would sit over the wrong pixels.
+                edit.remove::<PaintedMask>(targets[0])?;
+                edit.remove_asset(targets[0], &AssetRole::new("painted-mask")?)?;
             }
             Ok(())
+        })?;
+        self.commit(patch).await
+    }
+
+    /// Stores the user's page-sized inpainting mask on a text region (one undo step).
+    pub(crate) async fn set_painted_mask(
+        &mut self,
+        region: EntityId,
+        png: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        snapshot
+            .component::<SceneRegion>(region)?
+            .context("not a detection region")?;
+        let patch = snapshot.patch(|edit| {
+            edit.set(region, &PaintedMask {})?;
+            edit.set_asset(
+                region,
+                &AssetRole::new("painted-mask")?,
+                AssetInput::new(
+                    std::sync::Arc::<[u8]>::from(png),
+                    "image/png",
+                    AssetMetadata {
+                        width: Some(width),
+                        height: Some(height),
+                        attributes: Default::default(),
+                    },
+                ),
+            )
         })?;
         self.commit(patch).await
     }
@@ -1991,6 +2025,45 @@ mod tests {
         edit.relate::<FitsTo>(layer, region).unwrap();
         session.commit(edit.finish().unwrap()).await.unwrap();
         (page, region, bubble, content, layer)
+    }
+
+    #[tokio::test]
+    async fn painted_mask_is_one_undo_step_and_moving_the_region_clears_it() {
+        let mut session = Session::memory().await.unwrap();
+        let (_, region, ..) = page_with_text_region(&mut session).await;
+        let mut project = Project::new(session, "test".to_owned());
+        let role = AssetRole::new("painted-mask").unwrap();
+        let has_mask = |project: &Project| {
+            let snapshot = project.snapshot();
+            (
+                snapshot.component::<PaintedMask>(region).unwrap().is_some(),
+                snapshot.asset(region, &role).unwrap().is_some(),
+            )
+        };
+
+        let commit = project
+            .set_painted_mask(region, vec![1, 2, 3], 100, 100)
+            .await
+            .unwrap();
+        project.record_commit(&commit);
+        assert_eq!(has_mask(&project), (true, true));
+        project.undo().await.unwrap();
+        assert_eq!(has_mask(&project), (false, false));
+        project.redo().await.unwrap();
+        assert_eq!(has_mask(&project), (true, true));
+
+        let update = GeometryUpdate {
+            layer: region,
+            points: Some(vec![
+                Point { x: 5.0, y: 5.0 },
+                Point { x: 20.0, y: 5.0 },
+                Point { x: 20.0, y: 20.0 },
+                Point { x: 5.0, y: 20.0 },
+            ]),
+        };
+        let commit = project.set_region_geometry(vec![update]).await.unwrap();
+        project.record_commit(&commit);
+        assert_eq!(has_mask(&project), (false, false));
     }
 
     #[tokio::test]

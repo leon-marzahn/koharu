@@ -1648,3 +1648,38 @@ async fn page_status_is_user_authored_and_absent_means_todo() {
         Some(PageStatus::Done)
     );
 }
+
+#[tokio::test]
+async fn painted_mask_is_user_authored_and_absent_on_old_regions() {
+    let mut session = Session::memory().await.unwrap();
+    let mut region = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let page_id = edit.add_page(page(), At::End)?;
+            region = Some(edit.add_analysis_region::<TextRegion>(
+                page_id,
+                At::End,
+                &Geometry::rectangle(0.0, 0.0, 10.0, 10.0),
+                None,
+            )?);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    let region = region.unwrap();
+    // A region saved before the component existed has none.
+    assert!(snapshot.component::<PaintedMask>(region).unwrap().is_none());
+
+    let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.inpainting").unwrap());
+    assert!(matches!(
+        snapshot.edit_as(generation).set(region, &PaintedMask {}),
+        Err(Error::Authorship(_))
+    ));
+
+    let patch = snapshot
+        .patch(|edit| edit.set(region, &PaintedMask {}))
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    assert!(snapshot.component::<PaintedMask>(region).unwrap().is_some());
+}
