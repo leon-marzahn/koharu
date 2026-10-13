@@ -1,7 +1,13 @@
 'use client'
 
 import { Brush, Check, Eraser, ScanText, Trash2, Undo2, X } from 'lucide-react'
-import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SelectionControls } from '@/components/editor/SelectionControls'
@@ -93,36 +99,65 @@ export function RegionsOverlay({
     strokes: Point[][]
     cleared: boolean
   } | null>(null)
-  const [storedMask, setStoredMask] = useState<{
-    url: string
-    width: number
-    height: number
-  } | null>(null)
-  const maskFrame = region ? paddedFrame(regionFrame(region)) : null
+  const [storedMask, setStoredMask] = useState<ImageBitmap | null>(null)
   const paintFrame = region && painting ? paddedFrame(regionFrame(region)) : null
-  const maskRegion = region?.id
-  const [maskTick, setMaskTick] = useState(0)
+  // Fetched only in Paint mode; re-entering Paint mode after Apply refetches it.
+  const maskRegion = painting ? region?.id : undefined
+  const canvas = useRef<HTMLCanvasElement | null>(null)
 
-  // Show what is saved: the stored mask is a page-sized PNG, shown by its luminance.
+  // The stored mask is a page-sized grayscale PNG (white = masked).
   useEffect(() => {
     if (!maskRegion) return
     let live = true
-    let url: string | null = null
+    let bitmap: ImageBitmap | null = null
     void call(commands.getPaintedMask, maskRegion)
-      .then((bytes) => {
+      .then(async (bytes) => {
         if (!live || !bytes.length) return
-        const png = new Uint8Array(bytes)
-        const header = new DataView(png.buffer) // IHDR: big-endian width, height at bytes 16, 20
-        url = URL.createObjectURL(new Blob([png], { type: 'image/png' }))
-        setStoredMask({ url, width: header.getUint32(16), height: header.getUint32(20) })
+        bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
+        if (live) setStoredMask(bitmap)
+        else bitmap.close()
       })
       .catch(() => undefined)
     return () => {
       live = false
       setStoredMask(null)
-      if (url) URL.revokeObjectURL(url)
+      bitmap?.close()
     }
-  }, [maskRegion, maskTick])
+  }, [maskRegion])
+
+  // The canvas works in page pixels (its CSS size stretches it over the box), so neither
+  // zoom nor devicePixelRatio enters the drawing: mixing them is what hid the old overlay.
+  useEffect(() => {
+    const context = canvas.current?.getContext('2d')
+    if (!context || !paintFrame || !painting) return
+    const { width, height } = context.canvas
+    context.clearRect(0, 0, width, height)
+    const color = getComputedStyle(context.canvas).color
+    if (storedMask && !painting.cleared) {
+      // Luminance to alpha, then tint: white mask pixels show, black ones vanish.
+      const scratch = new OffscreenCanvas(width, height)
+      const s = scratch.getContext('2d')!
+      s.drawImage(storedMask, -paintFrame.x, -paintFrame.y)
+      const pixels = s.getImageData(0, 0, width, height)
+      for (let i = 0; i < pixels.data.length; i += 4) pixels.data[i + 3] = pixels.data[i]
+      s.putImageData(pixels, 0, 0)
+      s.globalCompositeOperation = 'source-in'
+      s.fillStyle = color
+      s.fillRect(0, 0, width, height)
+      context.drawImage(scratch, 0, 0)
+    }
+    context.strokeStyle = color
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    context.lineWidth = brush.diameter
+    for (const stroke of painting.strokes) {
+      context.beginPath()
+      // A lone point repeats so the round cap still draws a dot.
+      for (const p of stroke.length === 1 ? [stroke[0], stroke[0]] : stroke)
+        context.lineTo(p.x - paintFrame.x, p.y - paintFrame.y)
+      context.stroke()
+    }
+  })
   // ponytail: the backend clips again, so this clamp only keeps the preview honest.
   const clamp = (p: Point, f: Frame): Point => ({
     x: Math.min(Math.max(p.x, f.x), f.x + f.width),
@@ -135,7 +170,6 @@ export function RegionsOverlay({
     setPainting(null)
     void call(commands.paintRegionMask, region.id, strokes, brush.diameter, cleared)
       .then(() => refresh(projectKey, pagesKey, pageKey))
-      .then(() => setMaskTick((tick) => tick + 1))
       .catch(() => undefined)
   }
 
@@ -212,21 +246,6 @@ export function RegionsOverlay({
     return bounds ? pagePoint(event.clientX, event.clientY, bounds, camera) : null
   }
 
-  const maskNode = maskFrame && storedMask && (
-    <div
-      data-testid='region-stored-mask'
-      className='pointer-events-none absolute bg-[var(--canvas-region-stroke)] opacity-60'
-      style={{
-        left: -maskFrame.x * camera.zoom,
-        top: -maskFrame.y * camera.zoom,
-        width: storedMask.width * camera.zoom,
-        height: storedMask.height * camera.zoom,
-        maskImage: `url(${storedMask.url})`,
-        maskMode: 'luminance',
-        maskSize: '100% 100%',
-      }}
-    />
-  )
   return (
     <>
       {regions.map((item) => {
@@ -372,18 +391,10 @@ export function RegionsOverlay({
           </Button>
         </div>
       )}
-      {!painting && region && maskFrame && maskNode && (
-        <div
-          className='pointer-events-none absolute overflow-hidden'
-          style={{ ...cssFrame(maskFrame, camera), transform: undefined }}
-        >
-          {maskNode}
-        </div>
-      )}
       {painting && paintFrame && (
         <div
           data-testid='region-paint-surface'
-          className='pointer-events-auto absolute cursor-crosshair touch-none overflow-hidden'
+          className='pointer-events-auto absolute cursor-crosshair touch-none overflow-hidden bg-[var(--canvas-region-stroke)]/15 outline-2 outline-[var(--canvas-region-stroke)]'
           style={{ ...cssFrame(paintFrame, camera), transform: undefined }}
           onPointerDown={(event) => {
             if (event.button !== 0) return
@@ -410,30 +421,13 @@ export function RegionsOverlay({
           }}
           onPointerCancel={() => setPainting({ ...painting, pointer: null })}
         >
-          {!painting.cleared && maskNode}
-          <svg className='pointer-events-none absolute inset-0 size-full'>
-            {painting.strokes.map((stroke, index) => {
-              // A lone point repeats so the round cap still draws a dot.
-              const path = stroke.length === 1 ? [stroke[0], stroke[0]] : stroke
-              return (
-                <polyline
-                  key={index}
-                  fill='none'
-                  stroke='var(--canvas-region-stroke)'
-                  strokeOpacity={0.6}
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={brush.diameter * camera.zoom}
-                  points={path
-                    .map(
-                      (p) =>
-                        `${(p.x - paintFrame.x) * camera.zoom},${(p.y - paintFrame.y) * camera.zoom}`,
-                    )
-                    .join(' ')}
-                />
-              )
-            })}
-          </svg>
+          <canvas
+            ref={canvas}
+            data-testid='region-paint-canvas'
+            width={Math.round(paintFrame.width)}
+            height={Math.round(paintFrame.height)}
+            className='pointer-events-none absolute inset-0 size-full text-[var(--canvas-region-stroke)] opacity-60'
+          />
         </div>
       )}
       {drawing && (

@@ -12,9 +12,11 @@ Two earlier fixes (tickets 22, 23, and a later commit "show the stored mask when
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Root cause named, with evidence
-- [ ] Paint mode shows the paintable area, the stored mask, and live strokes (checked in a real browser)
-- [ ] Nothing is drawn when Paint mode is off
-- [ ] Tests cover the final behaviour
+- [x] Root cause named, with evidence
+- [x] Paint mode shows the paintable area, the stored mask, and live strokes (checked in a real browser)
+- [x] Nothing is drawn when Paint mode is off
+- [x] Tests cover the final behaviour
+
+**Root cause:** `camera.zoom` is in device pixels; `cssFrame` divides by `devicePixelRatio`, but the stored-mask div and the SVG strokes multiplied by `camera.zoom` alone. On a Retina display (DPR 2) both were drawn at twice the offset/size and clipped away by the `overflow-hidden` paint surface, which itself had no fill or outline, so nothing was visible. Fix: one `<canvas>` sized in page pixels, stretched over the box by CSS (no zoom/DPR in drawing), mask decoded with `createImageBitmap` and tinted via luminance→alpha, no CSS masks. Surface gets a tint and outline. Shown and fetched only in Paint mode.

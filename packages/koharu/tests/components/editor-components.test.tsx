@@ -1299,34 +1299,20 @@ describe('greenfield editor', () => {
         expect(paint.mock.calls[0][3]).toBe(true)
       })
 
-      it('shows the stored mask while painting', async () => {
-        const png = new Uint8Array(24)
-        new DataView(png.buffer).setUint32(16, 100)
-        new DataView(png.buffer).setUint32(20, 80)
-        URL.createObjectURL = vi.fn(() => 'blob:mask')
-        URL.revokeObjectURL = vi.fn()
+      // Pixels are checked in a real Chromium (see ticket 25); jsdom has no 2D canvas.
+      it('loads the stored mask and shows a page-pixel canvas only in Paint mode', async () => {
         const user = userEvent.setup()
         setup()
-        vi.spyOn(commands, 'getPaintedMask').mockResolvedValue([...png])
+        const mask = vi.spyOn(commands, 'getPaintedMask').mockResolvedValue([])
         await user.click(screen.getByTestId('region-region-1'))
+        expect(mask).not.toHaveBeenCalled()
+        expect(screen.queryByTestId('region-paint-canvas')).not.toBeInTheDocument()
         await user.click(screen.getByRole('button', { name: 'Paint mask', hidden: true }))
-        const mask = await screen.findByTestId('region-stored-mask')
-        expect(mask).toHaveStyle({ width: '100px', height: '80px' })
-        await user.click(screen.getByRole('button', { name: 'Clear mask', hidden: true }))
-        expect(screen.queryByTestId('region-stored-mask')).not.toBeInTheDocument()
-      })
-
-      it('keeps showing the stored mask when the region is selected outside paint mode', async () => {
-        const png = new Uint8Array(24)
-        new DataView(png.buffer).setUint32(16, 100)
-        new DataView(png.buffer).setUint32(20, 80)
-        URL.createObjectURL = vi.fn(() => 'blob:mask')
-        URL.revokeObjectURL = vi.fn()
-        const user = userEvent.setup()
-        setup()
-        vi.spyOn(commands, 'getPaintedMask').mockResolvedValue([...png])
-        await user.click(screen.getByTestId('region-region-1'))
-        expect(await screen.findByTestId('region-stored-mask')).toBeInTheDocument()
+        expect(mask).toHaveBeenCalledWith('region-1')
+        const canvas = screen.getByTestId('region-paint-canvas') as HTMLCanvasElement
+        expect(canvas.width).toBeGreaterThan(0)
+        fireEvent.keyDown(window, { key: 'Escape' })
+        expect(screen.queryByTestId('region-paint-canvas')).not.toBeInTheDocument()
       })
 
       it('cancels with Escape without applying anything', async () => {
