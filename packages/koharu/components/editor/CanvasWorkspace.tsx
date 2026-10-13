@@ -1,6 +1,5 @@
 'use client'
 
-import type { Typography } from '@koharu/bridge/protocol'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -44,6 +43,7 @@ import {
   type CanvasTool,
 } from '@/lib/store'
 import { prefetchCanvasPages, workspaceColor, type CanvasColor } from '@koharu/bridge/canvas'
+import type { Typography } from '@koharu/bridge/protocol'
 import { commands, type Frame, type Point, type TransformFrame } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
@@ -500,7 +500,11 @@ export function CanvasWorkspace() {
           ? [
               {
                 layer: layer.id,
-                typography: stepTypography(layer.typography ?? defaultTypography, dir, event.shiftKey),
+                typography: stepTypography(
+                  layer.typography ?? defaultTypography,
+                  dir,
+                  event.shiftKey,
+                ),
               },
             ]
           : [],
@@ -590,14 +594,30 @@ export function CanvasWorkspace() {
       const textOnly = current.originals.every(({ element }) =>
         page.layers.some((layer) => layer.id === element && isTextLayer(layer)),
       )
-      const bubbles = page.regions
-        .filter((region) => region.kind === BUBBLE_REGION && region.geometry.points.length)
-        .map(({ geometry }) => {
-          const xs = geometry.points.map((p) => p.x)
-          const ys = geometry.points.map((p) => p.y)
-          const [x, y] = [Math.min(...xs), Math.min(...ys)]
-          return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
-        })
+      const boundsOf = (points: { x: number; y: number }[]) => {
+        const xs = points.map((p) => p.x)
+        const ys = points.map((p) => p.y)
+        const [x, y] = [Math.min(...xs), Math.min(...ys)]
+        return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
+      }
+      // The container is the region the boxes belong to (their bubble, or the region drawn for
+      // them); without one, any bubble under the box.
+      const owners = new Set(
+        current.originals
+          .map(
+            ({ element }) =>
+              page.layers.find((layer) => layer.id === element && isTextLayer(layer)) as
+                | { automatic_region: string | null }
+                | undefined,
+          )
+          .map((layer) => layer?.automatic_region),
+      )
+      const owner = owners.size === 1 ? page.regions.find((r) => owners.has(r.id)) : undefined
+      const bubbles = (
+        owner ? [owner] : page.regions.filter((region) => region.kind === BUBBLE_REGION)
+      )
+        .filter((region) => region.geometry.points.length)
+        .map(({ geometry }) => boundsOf(geometry.points))
       const snap = snapMoveToBubble(
         current.originals.map(({ frame }) => frame),
         raw,
@@ -658,30 +678,30 @@ export function CanvasWorkspace() {
       const operation =
         current.kind === 'paint'
           ? enqueue(() =>
-            call(commands.commitPaint, current.revision, current.layer, current.points, {
-              diameter: current.diameter,
-              color: current.color!,
-            }),
-          ).then((result) => {
-            selectLayers([result.layer])
-            return refresh(projectKey, pagesKey, pageKey)
-          })
-          : current.kind === 'erase'
-            ? enqueue(() =>
-              call(
-                commands.commitErase,
-                current.revision,
-                current.layer!,
-                current.points,
-                current.diameter,
-              ),
+              call(commands.commitPaint, current.revision, current.layer, current.points, {
+                diameter: current.diameter,
+                color: current.color!,
+              }),
             ).then((result) => {
               selectLayers([result.layer])
               return refresh(projectKey, pagesKey, pageKey)
             })
+          : current.kind === 'erase'
+            ? enqueue(() =>
+                call(
+                  commands.commitErase,
+                  current.revision,
+                  current.layer!,
+                  current.points,
+                  current.diameter,
+                ),
+              ).then((result) => {
+                selectLayers([result.layer])
+                return refresh(projectKey, pagesKey, pageKey)
+              })
             : enqueue(() =>
-              call(commands.commitInpaint, current.revision, current.points, current.diameter),
-            )
+                call(commands.commitInpaint, current.revision, current.points, current.diameter),
+              )
       commitPending.current = true
       void operation
         .catch(() => canvas?.cancelStroke())
@@ -1076,7 +1096,7 @@ class FrameCommand<Value> {
   constructor(
     private readonly execute: (value: Value) => void | Promise<unknown>,
     private readonly merge: (current: Value, next: Value) => Value = (_current, next) => next,
-  ) { }
+  ) {}
 
   schedule(value: Value): void {
     this.pending = this.pending === undefined ? value : this.merge(this.pending, value)

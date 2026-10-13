@@ -468,6 +468,63 @@ describe('canvas interaction adapter', () => {
     ])
   })
 
+  it('snaps a dragged box to the drawn region it belongs to, which is not a bubble', async () => {
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [
+        {
+          type: 'text',
+          id: 'element',
+          parent: 'page',
+          geometry: layer.geometry,
+          angle_degrees: 0,
+          visibility: { visible: true, opacity: 1 },
+          content: {
+            id: 'element-content',
+            source: { text: 'Source', language: 'en' },
+            translation: { text: 'Rendered', language: null },
+            role: null,
+            source_region: null,
+          },
+          typography: null,
+          layout: 'paragraph',
+          automatic_region: 'drawn',
+        },
+      ],
+      regions: [
+        {
+          id: 'drawn',
+          parent: 'page',
+          geometry: {
+            points: [
+              { x: 20, y: 30 },
+              { x: 100, y: 30 },
+              { x: 100, y: 90 },
+              { x: 20, y: 90 },
+            ],
+          },
+          kind: 'dev.koharu.region.text',
+          label: null,
+        },
+      ],
+    }))
+    useKoharuStore.setState({
+      layerFrames: { element: { x: 30, y: 40, width: 50, height: 20, angle_degrees: 0 } },
+    })
+    vi.spyOn(commands, 'commitTransform').mockResolvedValue(2)
+    const surface = renderWorkspace()
+
+    // Right edge 80 + 17 = 97 snaps flush to the region's 100.
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 41, clientX: 50, clientY: 70 })
+    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 67, clientY: 70 })
+    fireEvent.pointerUp(surface, { pointerId: 41, clientX: 67, clientY: 70 })
+    await waitFor(() => expect(commands.commitTransform).toHaveBeenCalledOnce())
+    expect(canvas.updateTransform).toHaveBeenLastCalledWith([
+      { element: 'element', frame: expect.objectContaining({ x: 50, y: 40 }) },
+    ])
+  })
+
   it('cancels the canvas edit when a move changes nothing, so the next drag can start', async () => {
     installProject()
     useKoharuStore.setState({
