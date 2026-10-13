@@ -22,9 +22,9 @@ Out of scope: a non-rectangular eraser, a zoomed brush cursor, keyboard shortcut
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Brush/Eraser toggle erases part of the stored mask and of unapplied strokes, with live preview
-- [ ] Clear all is a separate button with a different icon and a confirmation when something would be lost
-- [ ] Each stroke keeps its own brush size
-- [ ] Rust and frontend tests above pass; `protocol.ts` regenerated; nine locales updated
+- [x] Brush/Eraser toggle erases part of the stored mask and of unapplied strokes, with live preview
+- [x] Clear all is a separate button with a different icon and a confirmation when something would be lost
+- [x] Each stroke keeps its own brush size
+- [x] Rust and frontend tests above pass; `protocol.ts` regenerated; nine locales updated
