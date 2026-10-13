@@ -14,7 +14,7 @@ Follow-up to 22. Three problems found by using it.
 
 **Blocked by:** none (22 is merged)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Applying a smaller mask on a region first cleaned with the box restores the original pixels inside the box but outside the mask (test on the real stage and cleanup layer)
 - [ ] The brush tool and the dropdown Inpaint behave as before (existing tests pass)
