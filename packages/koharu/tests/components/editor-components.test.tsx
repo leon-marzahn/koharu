@@ -1074,6 +1074,8 @@ describe('greenfield editor', () => {
       const button = screen.getByRole('button', { name: 'Delete region', hidden: true })
       expect(button.className).not.toContain('-translate-y-full')
       expect(button.parentElement?.className).toContain('-translate-y-full')
+      // ...and the button's own press nudge is switched off so it does not shift 1px either.
+      expect(button.className).toContain('active:not-aria-[haspopup]:translate-y-0')
     })
 
     it('ignores a draw gesture that did not move', async () => {

@@ -184,7 +184,7 @@ export function RegionsOverlay({
             variant='secondary'
             size='icon'
             aria-label={t('tools.reocrRegion')}
-            className='pointer-events-auto size-6'
+            className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() =>
               void call(commands.processRegion, region.id, false).catch(() => undefined)
@@ -197,7 +197,7 @@ export function RegionsOverlay({
             variant='secondary'
             size='icon'
             aria-label={t('tools.deleteRegion')}
-            className='pointer-events-auto size-6'
+            className='pointer-events-auto size-6 active:not-aria-[haspopup]:translate-y-0'
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => remove(region.id)}
           >
