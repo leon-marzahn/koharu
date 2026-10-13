@@ -75,7 +75,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     // Local fork: builds are not signed with a team ID, so macOS re-asks for the "Chromium Safe
     // Storage" keychain item on every rebuild. The webview stores nothing that needs it.
     #[cfg(target_os = "macos")]
-    let cef = cef.command_line_args([("--use-mock-keychain", None)]);
+    let cef = cef.command_line_args([("--use-mock-keychain", None::<&str>)]);
     #[cfg(target_os = "linux")]
     let cef = cef
         .enable_features(["Vulkan", "VulkanFromANGLE"])
