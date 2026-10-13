@@ -1316,6 +1316,19 @@ describe('greenfield editor', () => {
         expect(screen.queryByTestId('region-stored-mask')).not.toBeInTheDocument()
       })
 
+      it('keeps showing the stored mask when the region is selected outside paint mode', async () => {
+        const png = new Uint8Array(24)
+        new DataView(png.buffer).setUint32(16, 100)
+        new DataView(png.buffer).setUint32(20, 80)
+        URL.createObjectURL = vi.fn(() => 'blob:mask')
+        URL.revokeObjectURL = vi.fn()
+        const user = userEvent.setup()
+        setup()
+        vi.spyOn(commands, 'getPaintedMask').mockResolvedValue([...png])
+        await user.click(screen.getByTestId('region-region-1'))
+        expect(await screen.findByTestId('region-stored-mask')).toBeInTheDocument()
+      })
+
       it('cancels with Escape without applying anything', async () => {
         const { paint, surface } = await start()
         fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 20, clientY: 25 })

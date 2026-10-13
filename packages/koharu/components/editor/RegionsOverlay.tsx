@@ -98,15 +98,17 @@ export function RegionsOverlay({
     width: number
     height: number
   } | null>(null)
+  const maskFrame = region ? paddedFrame(regionFrame(region)) : null
   const paintFrame = region && painting ? paddedFrame(regionFrame(region)) : null
-  const paintingRegion = painting ? region?.id : undefined
+  const maskRegion = region?.id
+  const [maskTick, setMaskTick] = useState(0)
 
   // Show what is saved: the stored mask is a page-sized PNG, shown by its luminance.
   useEffect(() => {
-    if (!paintingRegion) return
+    if (!maskRegion) return
     let live = true
     let url: string | null = null
-    void call(commands.getPaintedMask, paintingRegion)
+    void call(commands.getPaintedMask, maskRegion)
       .then((bytes) => {
         if (!live || !bytes.length) return
         const png = new Uint8Array(bytes)
@@ -120,7 +122,7 @@ export function RegionsOverlay({
       setStoredMask(null)
       if (url) URL.revokeObjectURL(url)
     }
-  }, [paintingRegion])
+  }, [maskRegion, maskTick])
   // ponytail: the backend clips again, so this clamp only keeps the preview honest.
   const clamp = (p: Point, f: Frame): Point => ({
     x: Math.min(Math.max(p.x, f.x), f.x + f.width),
@@ -133,6 +135,7 @@ export function RegionsOverlay({
     setPainting(null)
     void call(commands.paintRegionMask, region.id, strokes, brush.diameter, cleared)
       .then(() => refresh(projectKey, pagesKey, pageKey))
+      .then(() => setMaskTick((tick) => tick + 1))
       .catch(() => undefined)
   }
 
@@ -209,6 +212,21 @@ export function RegionsOverlay({
     return bounds ? pagePoint(event.clientX, event.clientY, bounds, camera) : null
   }
 
+  const maskNode = maskFrame && storedMask && (
+    <div
+      data-testid='region-stored-mask'
+      className='pointer-events-none absolute bg-[var(--canvas-region-stroke)] opacity-60'
+      style={{
+        left: -maskFrame.x * camera.zoom,
+        top: -maskFrame.y * camera.zoom,
+        width: storedMask.width * camera.zoom,
+        height: storedMask.height * camera.zoom,
+        maskImage: `url(${storedMask.url})`,
+        maskMode: 'luminance',
+        maskSize: '100% 100%',
+      }}
+    />
+  )
   return (
     <>
       {regions.map((item) => {
@@ -354,6 +372,14 @@ export function RegionsOverlay({
           </Button>
         </div>
       )}
+      {!painting && region && maskFrame && maskNode && (
+        <div
+          className='pointer-events-none absolute overflow-hidden'
+          style={{ ...cssFrame(maskFrame, camera), transform: undefined }}
+        >
+          {maskNode}
+        </div>
+      )}
       {painting && paintFrame && (
         <div
           data-testid='region-paint-surface'
@@ -384,21 +410,7 @@ export function RegionsOverlay({
           }}
           onPointerCancel={() => setPainting({ ...painting, pointer: null })}
         >
-          {storedMask && !painting.cleared && (
-            <div
-              data-testid='region-stored-mask'
-              className='pointer-events-none absolute bg-[var(--canvas-region-stroke)] opacity-60'
-              style={{
-                left: -paintFrame.x * camera.zoom,
-                top: -paintFrame.y * camera.zoom,
-                width: storedMask.width * camera.zoom,
-                height: storedMask.height * camera.zoom,
-                maskImage: `url(${storedMask.url})`,
-                maskMode: 'luminance',
-                maskSize: '100% 100%',
-              }}
-            />
-          )}
+          {!painting.cleared && maskNode}
           <svg className='pointer-events-none absolute inset-0 size-full'>
             {painting.strokes.map((stroke, index) => {
               // A lone point repeats so the round cap still draws a dot.
