@@ -14,7 +14,7 @@ Out of scope: lock-all on a page, locking from the canvas, locking regions or th
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Hand-editing a box or a Scene Description locks it; edit plus lock is one undo step
 - [ ] The toggle locks and unlocks, survives reload, one undo step each
