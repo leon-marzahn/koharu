@@ -746,9 +746,6 @@ impl Project {
                 for &target in targets {
                     edit.set(target, geometry)?;
                 }
-                // A mask painted for the old box would sit over the wrong pixels.
-                edit.remove::<PaintedMask>(targets[0])?;
-                edit.remove_asset(targets[0], &AssetRole::new("painted-mask")?)?;
             }
             Ok(())
         })?;
@@ -2028,7 +2025,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn painted_mask_is_one_undo_step_and_moving_the_region_clears_it() {
+    async fn painted_mask_is_one_undo_step_and_survives_moving_the_region() {
         let mut session = Session::memory().await.unwrap();
         let (_, region, ..) = page_with_text_region(&mut session).await;
         let mut project = Project::new(session, "test".to_owned());
@@ -2063,7 +2060,9 @@ mod tests {
         };
         let commit = project.set_region_geometry(vec![update]).await.unwrap();
         project.record_commit(&commit);
-        assert_eq!(has_mask(&project), (false, false));
+        // The mask is in page pixels and is clipped to the region's box when used, so a bigger
+        // region keeps its small mask.
+        assert_eq!(has_mask(&project), (true, true));
     }
 
     /// Draw region, OCR and translate (pipeline writes), resize, paint a mask: every user edit

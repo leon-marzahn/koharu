@@ -20,5 +20,5 @@ The explicit "only inpainting" run already overrides the skip for pages that hav
 - [ ] Regions outside the run's scope (selection or entity scope) are not cleaned
 - [ ] Paint mask mode: strokes clipped to the region; Apply uses the painted mask; Escape and an empty stroke cancel with no canvas edit left active
 - [ ] The painted mask persists, loads from projects saved before it existed, is user-authored (a pipeline write is rejected, test through the real edit path), and is one undo step
-- [ ] Moving or resizing a region clears its painted mask
+- [x] Moving or resizing a region keeps its painted mask (page pixels, clipped to the box when used; changed in ticket 26)
 - [ ] New strings in every locale; component tests cover the mode, clipping and apply

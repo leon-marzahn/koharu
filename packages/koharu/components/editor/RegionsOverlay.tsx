@@ -299,7 +299,7 @@ export function RegionsOverlay({
         // The wrapper carries the offset: Button's own active:translate-y-px would override it
         // while pressed and make the button jump away from the cursor.
         <div
-          className='pointer-events-none absolute flex -translate-y-full gap-1'
+          className='pointer-events-none absolute z-20 flex -translate-y-full gap-1 pb-1.5'
           style={{
             left: cssFrame(preview ?? regionFrame(region), camera).left,
             top: cssFrame(preview ?? regionFrame(region), camera).top,
