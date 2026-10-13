@@ -325,7 +325,7 @@ fn description_system_prompt(request: &TranslationRequest) -> String {
             - Look at the attached page image.
             - Say who is present, what is happening, and the mood. Note who seems to be speaking to whom.
             - Write the description only in {target}, in a few plain sentences. Describe what is shown; do not translate or transcribe the dialogue. Ignore all text, speech bubbles and sound effects; describe only who is there, where, what they are doing and their expressions.
-            - List in `characters` each person who matches nobody on the character sheet: `source_name` as the page names them (empty if unnamed), and their `appearance`. Use an empty array when everyone is matched.
+            - List in `characters` each person who matches nobody on the character sheet: `source_name` as the page names them, and their `appearance`. Skip people the page does not name. Use an empty array when everyone is matched or unnamed.
             - Return only a JSON object with a `description` string and a `characters` array.
         "},
         target = request.target_language,
@@ -336,8 +336,8 @@ fn description_system_prompt(request: &TranslationRequest) -> String {
         prompt.push_str("\n\n");
         prompt.push_str(indoc! {"
             Character sheet requirements:
-            The `characters` array lists the project's recurring characters with their `appearance`.
-            When someone on the page matches a character, name them by `source_name` instead of describing them by looks.
+            The `characters` array lists the project's recurring characters with their `appearance` and `notes`.
+            Compare everyone on the page with those entries. When someone matches a character, call them by that character's `target_name` (for example 'Adachi') and do not describe their looks; the translator already knows them. Describe by looks only people who match nobody.
         "}.trim_end());
     }
     if let Some(instructions) = request
@@ -711,6 +711,10 @@ mod tests {
         let input: serde_json::Value = serde_json::from_str(&user).unwrap();
         assert_eq!(input["characters"][0]["appearance"], "twin tails");
         assert!(system.contains("Character sheet"));
+        // A matched person is called by `target_name`, not described by looks, and the page's
+        // unnamed strangers are not proposed (a proposal without a name is dropped by the parser).
+        assert!(system.contains("`target_name`") && system.contains("do not describe their looks"));
+        assert!(system.contains("Skip people the page does not name"));
         let schema = request_schema(&request);
         assert_eq!(schema["required"], json!(["description", "characters"]));
 
