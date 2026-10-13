@@ -546,6 +546,12 @@ pub(crate) async fn process_region(
         let geometry = snapshot
             .component::<Geometry>(region)?
             .context("the region has no geometry")?;
+        // An explicit one-box run on a locked box is refused with a message, not skipped silently.
+        if koharu_pipeline::region_locked(&snapshot, region)? {
+            return Err(
+                anyhow::anyhow!("this text box is locked; unlock it to run it again").into(),
+            );
+        }
         (
             page,
             size.width.round() as u32,

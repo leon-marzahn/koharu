@@ -10,8 +10,8 @@ use koharu_ml::{
     paddle_ocr_vl::PaddleOCRVLTask, paddle_ocr_vl_quantized::PaddleOCRVLQuantized,
 };
 use koharu_scene::{
-    Authored, EntityId, Geometry, LanguageTag, OcrAnalysis, Origin, RecognizedFrom, Region,
-    RegionSpec, SourceText, TextDirection, TextRegion,
+    Authored, EntityId, Geometry, LanguageTag, Locked, OcrAnalysis, Origin, Presents,
+    RecognizedFrom, Region, RegionSpec, Snapshot, SourceText, TextDirection, TextRegion,
 };
 
 const PRODUCER: &str = "dev.koharu.pipeline.ocr";
@@ -127,6 +127,7 @@ impl Model {
                 if previous
                     .as_ref()
                     .is_some_and(|value| matches!(value.text.origin, Origin::User))
+                    || content_locked(&input.scene, content)?
                 {
                     continue;
                 }
@@ -207,6 +208,30 @@ impl Model {
     }
 }
 
+/// Lock lives on the text layer presenting `content`, as in translation. A locked box keeps its
+/// source text through every OCR run.
+fn content_locked(scene: &Snapshot, content: EntityId) -> Result<bool> {
+    for relation in scene.relations_to_as::<Presents>(content) {
+        if scene
+            .component::<Locked>(relation.value().source)?
+            .is_some()
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Whether the text box recognised from `region` is Locked.
+pub fn region_locked(scene: &Snapshot, region: EntityId) -> Result<bool> {
+    for relation in scene.relations_to_as::<RecognizedFrom>(region) {
+        if content_locked(scene, relation.value().source)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 struct OcrTarget {
     content: EntityId,
     region: EntityId,
@@ -281,7 +306,52 @@ fn crop(source: &DynamicImage, geometry: &Geometry) -> Result<DynamicImage> {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_ocr_text;
+    use super::{normalize_ocr_text, region_locked};
+    use koharu_scene::{
+        At, Geometry, Locked, Origin, PageDraft, RecognizedFrom, Session, TextLayout,
+        TextLayoutKind, TextRegion,
+    };
+
+    /// Two boxes wired like detection wires them; only the first layer is locked.
+    #[tokio::test]
+    async fn locked_box_is_skipped_and_unlocked_sibling_is_not() {
+        let mut session = Session::memory().await.unwrap();
+        let mut regions = Vec::new();
+        let mut layers = Vec::new();
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(PageDraft::new("p", 10.0, 10.0), At::End)?;
+                for _ in 0..2 {
+                    let region = edit.add_analysis_region::<TextRegion>(
+                        page,
+                        At::End,
+                        &Geometry::rectangle(0.0, 0.0, 5.0, 5.0),
+                        None,
+                    )?;
+                    let content = edit.add_text_content(page, At::End)?;
+                    let layer = edit.add_text_layer(
+                        page,
+                        At::End,
+                        content,
+                        &TextLayout {
+                            origin: Origin::User,
+                            kind: TextLayoutKind::Paragraph,
+                            angle_degrees: None,
+                        },
+                    )?;
+                    edit.relate::<RecognizedFrom>(content, region)?;
+                    regions.push(region);
+                    layers.push(layer);
+                }
+                edit.set(layers[0], &Locked {})?;
+                Ok(())
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        assert!(region_locked(&scene, regions[0]).unwrap());
+        assert!(!region_locked(&scene, regions[1]).unwrap());
+    }
 
     #[test]
     fn repeated_placeholder_glyphs_are_an_ellipsis() {

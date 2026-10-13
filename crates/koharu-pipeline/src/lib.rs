@@ -28,7 +28,9 @@ pub use request::{InpaintingMask, Operation, Request, StopToken};
 pub use resources::{DeviceResources, ResourceSnapshot};
 pub use scope::{Bounds, Scope, padded_box};
 pub use stage::Stage;
-pub use stages::{Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig, RoremMixedConfig};
+pub use stages::{
+    Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig, RoremMixedConfig, region_locked,
+};
 
 use images::ImageCache;
 use model_cell::ModelCell;
