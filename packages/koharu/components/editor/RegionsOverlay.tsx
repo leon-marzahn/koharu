@@ -179,14 +179,17 @@ export function RegionsOverlay({
   const painted = painting !== null
   useEffect(() => {
     if (!painted) return
+    // Capture phase on window runs before CanvasWorkspace's bubble-phase shortcut, so the
+    // stroke undo owns Cmd/Ctrl+Z exclusively while painting.
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault()
+        event.stopImmediatePropagation()
         undoStroke()
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [painted])
 
   // Deleting a region also deletes the text box recognized from it (one undo step).
@@ -474,7 +477,9 @@ export function RegionsOverlay({
           )}
         </div>
       )}
-      {region && !drawing && (
+      {/* Hidden while painting: its rotate handle sits over the toolbar and its edge handles
+          over the paint surface, so both would take the clicks meant for Paint mode. */}
+      {region && !drawing && !painting && (
         <SelectionControls
           container={container}
           element={region.id}

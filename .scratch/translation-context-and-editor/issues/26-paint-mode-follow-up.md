@@ -15,9 +15,11 @@ Follow-up to 25, from the user's test of the merged build on a Retina display (d
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done (problem 3 not reproduced, see notes)
 
-- [ ] Each failure reproduced in a real browser before the fix
-- [ ] Toolbar buttons are clickable in Paint mode (elementFromPoint proof)
-- [ ] Cmd/Ctrl+Z in Paint mode undoes one stroke and nothing else, no "Nothing to undo"
-- [ ] A drag leaves visible strokes and a stored mask is visible (pixel proof on the real component)
+- [x] Each failure reproduced in a real browser before the fix (1 and 2; 3 did not reproduce)
+- [x] Toolbar buttons are clickable in Paint mode (elementFromPoint proof)
+- [x] Cmd/Ctrl+Z in Paint mode undoes one stroke and nothing else, no "Nothing to undo"
+- [x] A drag leaves visible strokes and a stored mask is visible (pixel proof on the real component)
+
+**Notes:** `packages/koharu/tests/browser/paint-mode.mjs` mounts the real `RegionsOverlay` in headless Chromium at DPR 2, with Tauri IPC mocked. 1: the SelectionControls rotate handle (z-order and pointer-events) covered Clear, so SelectionControls is now hidden while painting. Disabled Apply and Undo ignore clicks by design. 2: the stroke-undo key handler now runs in the window capture phase and calls `stopImmediatePropagation`. 3: on the real component the drawing works (canvas alpha after a drag, the stored mask, and the screenshot). Apply is greyed in `26-screenshot.png`, so no stroke was recorded there. The cause is upstream of `RegionsOverlay` (CanvasWorkspace or a stale build) and needs a check in the desktop app.
