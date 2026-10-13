@@ -324,7 +324,7 @@ fn description_system_prompt(request: &TranslationRequest) -> String {
             Requirements:
             - Look at the attached page image.
             - Say who is present, what is happening, and the mood. Note who seems to be speaking to whom.
-            - Write the description only in {target}, in a few plain sentences. Describe what is shown; do not translate or transcribe the dialogue.
+            - Write the description only in {target}, in a few plain sentences. Describe what is shown; do not translate or transcribe the dialogue. Ignore all text, speech bubbles and sound effects; describe only who is there, where, what they are doing and their expressions.
             - List in `characters` each person who matches nobody on the character sheet: `source_name` as the page names them (empty if unnamed), and their `appearance`. Use an empty array when everyone is matched.
             - Return only a JSON object with a `description` string and a `characters` array.
         "},

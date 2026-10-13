@@ -35,13 +35,14 @@ impl PageWork {
     }
 
     fn ready(&self, index: usize) -> bool {
-        let Some(prerequisite) = prerequisite(self.stages[index].stage) else {
-            return true;
-        };
-        self.stages
-            .iter()
-            .find(|work| work.stage == prerequisite)
-            .is_none_or(|work| work.state == WorkState::Finished)
+        // A prerequisite outside the run does not block. A skipped one is marked Finished by the
+        // executor; a failed one aborts the whole run, so nothing waits on it.
+        prerequisites(self.stages[index].stage).iter().all(|need| {
+            self.stages
+                .iter()
+                .find(|work| work.stage == *need)
+                .is_none_or(|work| work.state == WorkState::Finished)
+        })
     }
 }
 
@@ -142,11 +143,12 @@ impl Scheduler {
     }
 }
 
-const fn prerequisite(stage: Stage) -> Option<Stage> {
+/// Translation also waits for Inpainting so the description sees the cleaned page.
+const fn prerequisites(stage: Stage) -> &'static [Stage] {
     match stage {
-        Stage::Detection => None,
-        Stage::Ocr | Stage::Inpainting => Some(Stage::Detection),
-        Stage::Translation => Some(Stage::Ocr),
+        Stage::Detection => &[],
+        Stage::Ocr | Stage::Inpainting => &[Stage::Detection],
+        Stage::Translation => &[Stage::Ocr, Stage::Inpainting],
     }
 }
 
@@ -183,10 +185,13 @@ mod tests {
 
         assert!(!scheduler.complete_stage(pages[0], Stage::Ocr));
         busy.remove(&Stage::Ocr);
+        // Translation waits for Inpainting; the next page's Detection is already running.
+        assert!(scheduler.start_next(&busy).is_none());
+        assert!(!scheduler.complete_stage(pages[0], Stage::Inpainting));
+        busy.remove(&Stage::Inpainting);
         let translation = scheduler.start_next(&busy).unwrap();
         assert_eq!(translation, (pages[0], Stage::Translation));
         assert!(busy.contains(&Stage::Detection));
-        assert!(busy.contains(&Stage::Inpainting));
     }
 
     #[test]
@@ -216,5 +221,46 @@ mod tests {
         assert!(scheduler.complete_stage(pages[0], Stage::Inpainting));
         busy.clear();
         assert_eq!(scheduler.start_next(&busy), Some((pages[1], Stage::Ocr)));
+    }
+
+    fn run_order(stages: &[Stage]) -> Vec<Stage> {
+        let pages = pages(1);
+        let mut scheduler = Scheduler::new(&pages, stages);
+        let mut order = Vec::new();
+        while let Some((page, stage)) = scheduler.start_next(&BTreeSet::new()) {
+            order.push(stage);
+            scheduler.complete_stage(page, stage);
+        }
+        order
+    }
+
+    #[test]
+    fn full_run_translates_after_inpainting() {
+        let order = run_order(&Stage::ALL);
+        let at = |stage| order.iter().position(|s| *s == stage).unwrap();
+        assert!(at(Stage::Inpainting) < at(Stage::Translation));
+        assert!(at(Stage::Ocr) < at(Stage::Translation));
+    }
+
+    #[test]
+    fn translation_waits_for_ocr_without_inpainting() {
+        let pages = pages(1);
+        let mut scheduler = Scheduler::new(&pages, &[Stage::Translation, Stage::Ocr]);
+        let busy = BTreeSet::new();
+        assert_eq!(scheduler.start_next(&busy).unwrap().1, Stage::Ocr);
+        assert!(scheduler.start_next(&busy).is_none());
+    }
+
+    #[test]
+    fn translation_alone_and_skipped_inpainting_do_not_block() {
+        assert_eq!(run_order(&[Stage::Translation]), [Stage::Translation]);
+        // The executor marks a skipped stage complete, which releases Translation.
+        let pages = pages(1);
+        let mut scheduler = Scheduler::new(&pages, &[Stage::Inpainting, Stage::Translation]);
+        let busy = BTreeSet::new();
+        assert_eq!(scheduler.start_next(&busy).unwrap().1, Stage::Inpainting);
+        assert!(scheduler.start_next(&busy).is_none());
+        scheduler.complete_stage(pages[0], Stage::Inpainting);
+        assert_eq!(scheduler.start_next(&busy).unwrap().1, Stage::Translation);
     }
 }

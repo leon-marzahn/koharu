@@ -12,10 +12,10 @@ Out of scope: blanking text regions on pages that have not been cleaned; a setti
 
 **Blocked by:** 30 Describe this page (merged)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A Full run orders Detection, OCR, Inpainting, Translation for a page; a failed or skipped inpainting does not block translation
-- [ ] The description request carries the source with the cleanup layers composited when they exist, else the source
-- [ ] The describe prompt tells the model to ignore text and describe only the visuals
-- [ ] The translation request still carries the original page
-- [ ] Scheduler test for the new prerequisite and the failure/skip cases; a test that the description image differs from the source when a cleanup layer exists and equals it when none does
+- [x] A Full run orders Detection, OCR, Inpainting, Translation for a page; a failed or skipped inpainting does not block translation
+- [x] The description request carries the source with the cleanup layers composited when they exist, else the source
+- [x] The describe prompt tells the model to ignore text and describe only the visuals
+- [x] The translation request still carries the original page
+- [x] Scheduler test for the new prerequisite and the failure/skip cases; a test that the description image differs from the source when a cleanup layer exists and equals it when none does

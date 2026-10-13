@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use async_trait::async_trait;
+use image::{DynamicImage, GenericImageView as _};
 use koharu_scene::{
     Authored, CharacterSheet, CharacterUpdate, EntityId, Generation, LanguageTag, Locked, Origin,
-    Proposals, SceneDescription, Snapshot, SourceText, StalePage, TermList, TermUpdate,
-    Translation,
+    Proposals, RasterLayer, RasterLayerKind, SceneDescription, Snapshot, SourceText, StalePage,
+    TermList, TermUpdate, Translation,
 };
 use koharu_translator::{
     Translated, TranslationCharacter, TranslationCharacterUpdate, TranslationContext,
@@ -318,6 +321,39 @@ fn merge_proposals(scene: &Snapshot, mut new: TranslationProposals) -> Result<Op
     Ok((merged != before).then_some(merged))
 }
 
+/// The page for the description: the source with its Cleanup layers overlaid (the same overlay
+/// inpainting uses), so dialogue does not get summarised. No renderer: it would also draw text and
+/// paint layers. Falls back to the plain source when there is no cleanup layer.
+async fn clean_page(input: &StageInput) -> Result<Option<Arc<DynamicImage>>> {
+    let Some(source) = input.images.get(&input.scene, input.page, "source").await? else {
+        return Ok(None);
+    };
+    let mut page = None;
+    for entity in input.scene.children(input.page)? {
+        if input
+            .scene
+            .component::<RasterLayer>(entity)?
+            .is_none_or(|layer| layer.kind != RasterLayerKind::Cleanup)
+        {
+            continue;
+        }
+        let Some(cleanup) = input.images.get(&input.scene, entity, "source").await? else {
+            continue;
+        };
+        anyhow::ensure!(
+            cleanup.dimensions() == source.dimensions(),
+            "cleanup layer dimensions do not match page {}",
+            input.page
+        );
+        let page = page.get_or_insert_with(|| source.to_rgba8());
+        image::imageops::overlay(page, &cleanup.to_rgba8(), 0, 0);
+    }
+    Ok(Some(match page {
+        Some(page) => Arc::new(DynamicImage::ImageRgba8(page)),
+        None => source,
+    }))
+}
+
 impl Processor {
     /// The description request: page image plus Character sheet, sent to the description model
     /// (its own provider config, usually not translation's). `None` when no model is set or the
@@ -330,7 +366,7 @@ impl Processor {
         let Some(model) = self.config.description_model.as_ref() else {
             return Ok(None);
         };
-        let Some(image) = input.images.get(&input.scene, input.page, "source").await? else {
+        let Some(image) = clean_page(input).await? else {
             return Ok(None);
         };
         let request = TranslationRequest::describing(self.config.target_language)
@@ -601,9 +637,81 @@ fn write_translations(
 
 #[cfg(test)]
 mod tests {
+    use image::{Rgba, RgbaImage};
     use koharu_scene::{At, Authored, PageDraft, Session, TextLayout, TextLayoutKind, Translation};
 
     use super::*;
+
+    fn png(image: &DynamicImage) -> Arc<[u8]> {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image.write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+        Arc::<[u8]>::from(bytes.into_inner())
+    }
+
+    async fn page_input(cleanup: Option<RgbaImage>) -> StageInput {
+        use koharu_scene::{AssetInput, AssetMetadata, AssetRole};
+        let asset = |image: &DynamicImage| {
+            AssetInput::new(
+                png(image),
+                "image/png",
+                AssetMetadata {
+                    width: Some(4),
+                    height: Some(4),
+                    attributes: Default::default(),
+                },
+            )
+        };
+        let mut session = Session::memory().await.unwrap();
+        let mut page = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let id = edit.add_page(PageDraft::new("page", 4.0, 4.0), At::End)?;
+                let source = DynamicImage::ImageRgba8(RgbaImage::from_pixel(4, 4, Rgba([9; 4])));
+                edit.set_asset(id, &AssetRole::new("source")?, asset(&source))?;
+                if let Some(cleanup) = &cleanup {
+                    let layer = edit.add_entity(id, At::Start)?;
+                    edit.set(
+                        layer,
+                        &RasterLayer {
+                            origin: Origin::User,
+                            name: "Cleanup".to_owned(),
+                            kind: RasterLayerKind::Cleanup,
+                        },
+                    )?;
+                    let cleanup = DynamicImage::ImageRgba8(cleanup.clone());
+                    edit.set_asset(layer, &AssetRole::new("source")?, asset(&cleanup))?;
+                }
+                page = Some(id);
+                Ok(())
+            })
+            .unwrap();
+        let scene = session.commit(patch).await.unwrap().snapshot;
+        StageInput::new(
+            scene,
+            page.unwrap(),
+            None,
+            None,
+            Arc::new(crate::ImageCache::default()),
+            None,
+        )
+    }
+
+    #[tokio::test]
+    async fn description_image_has_cleanup_composited_else_is_the_source() {
+        let plain = clean_page(&page_input(None).await).await.unwrap().unwrap();
+        assert_eq!(plain.to_rgba8().get_pixel(1, 1), &Rgba([9; 4]));
+
+        let mut cleanup = RgbaImage::new(4, 4);
+        cleanup.put_pixel(1, 1, Rgba([200, 0, 0, 255]));
+        let cleaned = clean_page(&page_input(Some(cleanup)).await)
+            .await
+            .unwrap()
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(cleaned.get_pixel(1, 1), &Rgba([200, 0, 0, 255]));
+        assert_eq!(cleaned.get_pixel(0, 0), &Rgba([9; 4]));
+    }
 
     #[tokio::test]
     async fn every_character_sheet_entry_reaches_the_request() {
