@@ -12,7 +12,7 @@ Out of scope: storing explanations, chat history, a per-box "always include" not
 
 **Blocked by:** 15 Translate one box
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A note typed in the popover reaches the prompt for that box only, with the previous translation as context
 - [ ] The model's explanation appears next to the box and can be dismissed
