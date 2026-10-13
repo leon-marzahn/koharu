@@ -110,22 +110,6 @@ impl Committer for RejectCommitter {
 #[test]
 fn operations_expand_to_the_supported_workflows() {
     assert_eq!(
-        Operation::Through {
-            stage: Stage::Translation,
-        }
-        .stages()
-        .unwrap(),
-        vec![Stage::Detection, Stage::Ocr, Stage::Translation],
-    );
-    assert_eq!(
-        Operation::Through {
-            stage: Stage::Inpainting,
-        }
-        .stages()
-        .unwrap(),
-        vec![Stage::Detection, Stage::Inpainting],
-    );
-    assert_eq!(
         Operation::Only {
             stage: Stage::Translation,
         }

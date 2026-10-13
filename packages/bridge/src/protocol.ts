@@ -412,7 +412,7 @@ export type OpenAiConfig = Record<string, never>;
 
 export type OpenRouterConfig = Record<string, never>;
 
-export type Operation = { operation: "full" } | { operation: "through"; stage: Stage } | { operation: "only"; stage: Stage } | 
+export type Operation = { operation: "full" } | { operation: "only"; stage: Stage } | 
 /**  Translate the scoped boxes and explain the result; `note` steers this request only. */
 { operation: "translate_box"; note: string | null } | 
 /**

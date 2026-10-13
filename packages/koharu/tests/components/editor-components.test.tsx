@@ -490,7 +490,7 @@ describe('greenfield editor', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('3 selected')
   })
 
-  it('marks stale pages and retranslates only on click', async () => {
+  it('marks stale pages and processes them only on click', async () => {
     const user = userEvent.setup()
     installProject()
     const process = vi.spyOn(commands, 'process').mockResolvedValue(null as never)
@@ -505,20 +505,17 @@ describe('greenfield editor', () => {
     queryClient.setQueryData(pagesKey, [page('p1', false), page('p2', true), page('p3', true)])
     render(<PageRail />)
 
-    // Marking is passive: nothing has run yet.
+    // Marking is passive: nothing has run yet, and the rail has no run button.
     expect(process).not.toHaveBeenCalled()
     expect(screen.getAllByText('Stale')).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: /Retranslate/ })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Retranslate 2 stale pages' }))
+    render(<TitleBar />)
+    await user.click(screen.getByRole('menuitem', { name: 'Process' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Process 2 Stale Pages' }))
     expect(process).toHaveBeenLastCalledWith(
       { scope: 'pages', value: ['p2', 'p3'] },
-      { operation: 'only', stage: 'translation' },
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Retranslate all pages' }))
-    expect(process).toHaveBeenLastCalledWith(
-      { scope: 'project' },
-      { operation: 'only', stage: 'translation' },
+      { operation: 'full' },
     )
   })
 
@@ -609,18 +606,20 @@ describe('greenfield editor', () => {
         summary('p2', 'done', true),
         summary('p3', 'in_progress', true),
       ])
-      render(<PageRail />)
+      render(<TitleBar />)
 
-      await user.click(screen.getByRole('button', { name: 'Retranslate 2 stale pages' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Process' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Process 2 Stale Pages' }))
       expect(process).toHaveBeenLastCalledWith(
         { scope: 'pages', value: ['p3'] },
-        { operation: 'only', stage: 'translation' },
+        { operation: 'full' },
       )
 
-      await user.click(screen.getByRole('button', { name: 'Retranslate all pages' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Process' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Process Project' }))
       expect(process).toHaveBeenLastCalledWith(
         { scope: 'pages', value: ['p1', 'p3'] },
-        { operation: 'only', stage: 'translation' },
+        { operation: 'full' },
       )
     })
 
@@ -638,12 +637,20 @@ describe('greenfield editor', () => {
     })
   })
 
-  it('hides the stale retranslate action when no page is stale', () => {
+  it('disables Process Stale Pages and shows no rail actions when no page is stale', async () => {
+    const user = userEvent.setup()
     installProject()
     render(<PageRail />)
+    expect(screen.queryByRole('button', { name: 'Mark all as up to date' })).not.toBeInTheDocument()
 
-    expect(screen.queryByRole('button', { name: /stale pages/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retranslate all pages' })).toBeInTheDocument()
+    render(<TitleBar />)
+    await user.click(screen.getByRole('menuitem', { name: 'Process' }))
+    expect(await screen.findByRole('menuitem', { name: 'Process 0 Stale Pages' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    // The per-stage "Run X" items are gone; Process Project runs everything.
+    expect(screen.queryByRole('menuitem', { name: /^Run / })).not.toBeInTheDocument()
   })
 
   it('loads page thumbnails into the filmstrip', async () => {

@@ -16,7 +16,6 @@ import { useTranslation } from 'react-i18next'
 
 import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
 import { call } from '@/lib/backend'
-import { runBulk } from '@/lib/bulk'
 import {
   pageKey,
   pagesKey,
@@ -38,7 +37,6 @@ import {
   type PageStatus,
   type PageSummary,
   type ProjectInfo,
-  type Scope,
 } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
@@ -221,19 +219,6 @@ export function PageRail() {
 
   // Only ever run on click: stale pages are marked, never retranslated automatically.
   const staleIds = useMemo(() => pages.filter((page) => page.stale).map((page) => page.id), [pages])
-  const busy = useKoharuStore((state) =>
-    Object.values(state.jobs).some((job) => job.state === 'running'),
-  )
-  const retranslate = (only?: string[]) =>
-    runBulk(
-      pages,
-      (scope: Scope) =>
-        void call(commands.process, scope, { operation: 'only', stage: 'translation' }).catch(
-          () => undefined,
-        ),
-      t,
-      only,
-    )
 
   const dismissStale = (ids: string[]) =>
     void call(commands.dismissStale, ids)
@@ -319,40 +304,16 @@ export function PageRail() {
           </div>
         )}
 
-        {pages.length > 0 && (
+        {staleIds.length > 0 && (
           <div className='flex flex-col gap-1 border-b px-2 py-1.5'>
-            {staleIds.length > 0 && (
-              <Button
-                type='button'
-                size='sm'
-                variant='outline'
-                disabled={busy}
-                className='h-6 justify-start text-[10px]'
-                onClick={() => retranslate(staleIds)}
-              >
-                {t('navigator.retranslateStale', { count: staleIds.length })}
-              </Button>
-            )}
-            {staleIds.length > 0 && (
-              <Button
-                type='button'
-                size='sm'
-                variant='ghost'
-                className='h-6 justify-start text-[10px]'
-                onClick={() => dismissStale(staleIds)}
-              >
-                {t('navigator.markAllUpToDate')}
-              </Button>
-            )}
             <Button
               type='button'
               size='sm'
               variant='ghost'
-              disabled={busy}
               className='h-6 justify-start text-[10px]'
-              onClick={() => retranslate()}
+              onClick={() => dismissStale(staleIds)}
             >
-              {t('navigator.retranslateAll')}
+              {t('navigator.markAllUpToDate')}
             </Button>
           </div>
         )}

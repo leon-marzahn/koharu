@@ -23,7 +23,7 @@ import {
   useProject,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type Operation, type Scope, type Stage } from '@koharu/bridge/protocol'
+import { commands, type Operation, type Scope } from '@koharu/bridge/protocol'
 import {
   Menubar,
   MenubarContent as UiMenubarContent,
@@ -61,8 +61,10 @@ export function TitleBar() {
 
   const run = (scope: Scope, operation: Operation = { operation: 'full' }) =>
     void call(commands.process, scope, operation).catch(() => undefined)
-  // Whole-project runs leave Done pages alone and say how many were skipped.
-  const runProject = (operation?: Operation) => runBulk(pages, (scope) => run(scope, operation), t)
+  // Only ever run on click: stale pages are marked, never processed automatically.
+  const staleIds = pages.filter((page) => page.stale).map((page) => page.id)
+  // Whole-project (or stale-only) runs leave Done pages alone and say how many were skipped.
+  const runProject = (only?: string[]) => runBulk(pages, (scope) => run(scope), t, only)
 
   const closeProject = () => void call(commands.closeProject).catch(() => undefined)
 
@@ -217,18 +219,9 @@ export function TitleBar() {
               >
                 {t('menu.processLayers')}
               </MenubarItem>
-              <MenubarSeparator />
-              {(['detection', 'ocr', 'translation', 'inpainting'] as Stage[]).map((stage) => (
-                <MenubarItem
-                  key={stage}
-                  disabled={!project || pages.length === 0}
-                  onClick={() => runProject({ operation: 'through', stage })}
-                >
-                  {t('menu.runPhase', {
-                    phase: t(`phase.${stage}`),
-                  })}
-                </MenubarItem>
-              ))}
+              <MenubarItem disabled={staleIds.length === 0} onClick={() => runProject(staleIds)}>
+                {t('menu.processStale', { count: staleIds.length })}
+              </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
 
