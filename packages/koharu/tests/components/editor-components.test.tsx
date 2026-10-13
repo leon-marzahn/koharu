@@ -1497,7 +1497,6 @@ describe('greenfield editor', () => {
       ),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
     fireEvent.click(screen.getByRole('button', { name: 'Inpaint' }))
     await waitFor(() =>
       expect(run).toHaveBeenLastCalledWith(

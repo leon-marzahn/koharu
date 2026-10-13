@@ -71,10 +71,29 @@ export function InferenceControl({
         scope={scope}
         selectionCount={selectedPages.length}
         running={Boolean(running)}
-        canRun={!disabled && !unavailable}
         onScopeChange={setScope}
-        onRun={(operation) => onRun(scope, operation)}
       />
+
+      <Button
+        type='button'
+        variant='secondary'
+        size='sm'
+        className='rounded-lg px-2 text-[11px]'
+        disabled={disabled || unavailable || Boolean(running)}
+        onClick={() => onRun(scope, translateOnly)}
+      >
+        {t('inference.translateOnly')}
+      </Button>
+      <Button
+        type='button'
+        variant='secondary'
+        size='sm'
+        className='rounded-lg px-2 text-[11px]'
+        disabled={disabled || unavailable || Boolean(running)}
+        onClick={() => onRun(scope, inpaintOnly)}
+      >
+        {t('inference.inpaintOnly')}
+      </Button>
 
       <Button
         type='button'
@@ -98,16 +117,12 @@ function RuntimeSelector({
   scope,
   selectionCount,
   running,
-  canRun,
   onScopeChange,
-  onRun,
 }: {
   scope: PipelineScope
   selectionCount: number
   running: boolean
-  canRun: boolean
   onScopeChange: (scope: PipelineScope) => void
-  onRun: (operation: Operation) => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -219,10 +234,6 @@ function RuntimeSelector({
   }
   const processorLabel = (stage: Exclude<ModelStage, 'detection'>) =>
     pipeline ? modelNames[pipeline[stage].model] : t('inference.notSet')
-  const runAction = (operation: Operation) => {
-    setOpen(false)
-    onRun(operation)
-  }
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -274,17 +285,6 @@ function RuntimeSelector({
               label={t('inference.output')}
               value={outputLabel}
               onClick={() => setView('output')}
-            />
-            <div className='my-1 border-t border-border/70' />
-            <RunAction
-              label={t('inference.translateOnly')}
-              disabled={!canRun || running}
-              onClick={() => runAction(translateOnly)}
-            />
-            <RunAction
-              label={t('inference.inpaintOnly')}
-              disabled={!canRun || running}
-              onClick={() => runAction(inpaintOnly)}
             />
             <div className='my-1 border-t border-border/70' />
             <Button
@@ -376,29 +376,6 @@ function RuntimeSelector({
         )}
       </PopoverContent>
     </Popover>
-  )
-}
-
-function RunAction({
-  label,
-  disabled,
-  onClick,
-}: {
-  label: string
-  disabled: boolean
-  onClick: () => void
-}) {
-  return (
-    <Button
-      type='button'
-      variant='ghost'
-      size='sm'
-      disabled={disabled}
-      className='h-8 justify-start gap-2 rounded-lg px-2 text-[11px] font-normal hover:bg-primary/10'
-      onClick={onClick}
-    >
-      <Play className='size-3 text-primary' /> {label}
-    </Button>
   )
 }
 
