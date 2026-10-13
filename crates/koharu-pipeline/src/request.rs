@@ -34,6 +34,9 @@ pub enum Operation {
     TranslateBox {
         note: Option<String>,
     },
+    /// Ask the description model for the scoped pages' Scene Description and appearance
+    /// proposals, and nothing else: no translation, no stale marker.
+    DescribePage,
     Stages {
         stages: Vec<Stage>,
     },
@@ -56,7 +59,7 @@ impl Operation {
                 stage: Stage::Inpainting,
             } => vec![Stage::Detection, Stage::Inpainting],
             Self::Only { stage } => vec![*stage],
-            Self::TranslateBox { .. } => vec![Stage::Translation],
+            Self::TranslateBox { .. } | Self::DescribePage => vec![Stage::Translation],
             Self::Stages { stages } => Stage::ALL
                 .into_iter()
                 .filter(|stage| stages.contains(stage))
@@ -112,5 +115,13 @@ mod tests {
     fn translate_box_runs_only_the_translation_stage() {
         let operation = Operation::TranslateBox { note: None };
         assert_eq!(operation.stages().unwrap(), [Stage::Translation]);
+    }
+
+    #[test]
+    fn describe_page_runs_only_the_translation_stage() {
+        assert_eq!(
+            Operation::DescribePage.stages().unwrap(),
+            [Stage::Translation]
+        );
     }
 }

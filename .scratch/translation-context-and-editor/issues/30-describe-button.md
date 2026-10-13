@@ -12,10 +12,10 @@ Out of scope: describing several pages at once, a progress bar.
 
 **Blocked by:** 31 Lock text
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The ghost button under the Scene Description field describes this page only; nothing is translated
-- [ ] Appearance proposals from the run appear as pending characters
-- [ ] Disabled with a reason when no model is set or the description is locked
-- [ ] A failure is shown, and a successful run is one undo step
-- [ ] Rust test (the operation runs describe only), component test through the real button path, nine locales (real translations)
+- [x] The ghost button under the Scene Description field describes this page only; nothing is translated
+- [x] Appearance proposals from the run appear as pending characters
+- [x] Disabled with a reason when no model is set or the description is locked
+- [x] A failure is shown, and a successful run is one undo step
+- [x] Rust test (the operation runs describe only), component test through the real button path, nine locales (real translations)

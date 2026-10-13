@@ -58,6 +58,9 @@ interface KoharuStore {
   explainJobs: Record<string, string>
   expectExplanation: (job: string, entity: string) => void
   dismissExplanation: (entity: string) => void
+  // Describe jobs by id, with the error toast title; a failed one is shown to the user once.
+  describeJobs: Record<string, string>
+  expectDescription: (job: string, failedTitle: string) => void
   downloads: Record<string, Download>
   camera: { zoom: number; translation: [number, number]; fitted: boolean }
   canvasPage: EntityId | null
@@ -123,6 +126,9 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
       delete explanations[entity]
       return { explanations }
     }),
+  describeJobs: {},
+  expectDescription: (job, failedTitle) =>
+    set((state) => ({ describeJobs: { ...state.describeJobs, [job]: failedTitle } })),
   downloads: {},
   camera: { zoom: 1, translation: [0, 0], fitted: true },
   canvasPage: null,
@@ -192,6 +198,15 @@ export function receiveCanvas(canvas: CanvasState): void {
 }
 
 export function receiveJob(job: Job): void {
+  const failedTitle = useKoharuStore.getState().describeJobs[job.id]
+  if (failedTitle && job.state === 'failed') {
+    toast.add({ type: 'error', title: failedTitle, description: job.error ?? undefined })
+    useKoharuStore.setState((state) => {
+      const describeJobs = { ...state.describeJobs }
+      delete describeJobs[job.id]
+      return { describeJobs }
+    })
+  }
   useKoharuStore.setState((state) => {
     const entity = state.explainJobs[job.id]
     return {

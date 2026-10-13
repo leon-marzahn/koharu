@@ -671,6 +671,7 @@ function LayersInspector() {
                 .catch(() => undefined)
             }
           />
+          <DescribePage id={page.id} locked={page.description_locked} />
         </InspectorField>
       </div>
 
@@ -1139,6 +1140,51 @@ function LockToggle({
     >
       {locked ? <Lock className='size-3' /> : <LockOpen className='size-3' />}
     </Button>
+  )
+}
+
+// Runs only the description request for this page. Needs the description model (Description in
+// the model dropdown) and an unlocked description; a failed job is toasted by receiveJob.
+function DescribePage({ id, locked }: { id: string; locked: boolean }) {
+  const { t } = useTranslation()
+  const hasModel = useKoharuStore(
+    (state) => !!state.preferences?.pipeline.translation?.description_model,
+  )
+  const hint = !hasModel
+    ? t('inspector.describeNoModel')
+    : locked
+      ? t('inspector.describeLocked')
+      : null
+  return (
+    <div className='flex items-center justify-end gap-1.5'>
+      {hint && (
+        <span id='describe-hint' className='text-[9px] text-muted-foreground'>
+          {hint}
+        </span>
+      )}
+      <Button
+        type='button'
+        variant='ghost'
+        size='xs'
+        data-testid='describe-page'
+        disabled={!!hint}
+        aria-describedby={hint ? 'describe-hint' : undefined}
+        className='h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
+        onClick={() =>
+          void call(
+            commands.process,
+            { scope: 'pages', value: [id] },
+            { operation: 'describe_page' },
+          )
+            .then((job) =>
+              useKoharuStore.getState().expectDescription(job, t('inspector.describeFailed')),
+            )
+            .catch(() => undefined)
+        }
+      >
+        {t('inspector.describePage')}
+      </Button>
+    </div>
   )
 }
 

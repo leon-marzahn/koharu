@@ -48,6 +48,7 @@ import {
   type Preferences,
   type ProjectInfo,
 } from '@koharu/bridge/protocol'
+import { toast } from '@koharu/ui/components/toast'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
 const nativeWindow = vi.hoisted(() => ({
@@ -982,6 +983,85 @@ describe('greenfield editor', () => {
     await waitFor(() => expect(screen.getByTestId('translate-box-element')).toBeDisabled())
     expect(screen.getByTestId('translate-note-element')).toBeDisabled()
     expect(screen.getByTestId('lock-element')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  const withDescriptionModel = () => {
+    const translation = preferences.pipeline.translation!
+    useKoharuStore.setState({
+      preferences: {
+        ...preferences,
+        pipeline: {
+          ...preferences.pipeline,
+          translation: {
+            ...translation,
+            description_model: { provider: 'lm-studio', model: 'qwen-vl' },
+          },
+        },
+      },
+    })
+  }
+
+  it('describes only this page through the describe_page operation', async () => {
+    const user = userEvent.setup()
+    installProject()
+    withDescriptionModel()
+    const process = vi.spyOn(commands, 'process').mockResolvedValue('job' as never)
+    render(<Inspector />)
+
+    await user.click(screen.getByTestId('describe-page'))
+    expect(process).toHaveBeenCalledWith(
+      { scope: 'pages', value: ['page'] },
+      { operation: 'describe_page' },
+    )
+    await waitFor(() => expect(useKoharuStore.getState().describeJobs.job).toBeTruthy())
+  })
+
+  it('disables Describe with a reason when no description model is set', () => {
+    installProject()
+    render(<Inspector />)
+
+    expect(screen.getByTestId('describe-page')).toBeDisabled()
+    expect(screen.getByText('Set a description model to describe pages')).toBeInTheDocument()
+  })
+
+  it('disables Describe with a reason while the description is locked', async () => {
+    installProject()
+    withDescriptionModel()
+    const page = queryClient.getQueryData(pageKey) as Page
+    queryClient.setQueryData(pageKey, { ...page, description_locked: true })
+    render(<Inspector />)
+
+    expect(screen.getByTestId('describe-page')).toBeDisabled()
+    expect(screen.getByText('Unlock the description to describe this page')).toBeInTheDocument()
+  })
+
+  it('shows a failed describe job as an error toast, once', async () => {
+    const user = userEvent.setup()
+    installProject()
+    withDescriptionModel()
+    vi.spyOn(commands, 'process').mockResolvedValue('job' as never)
+    const add = vi.spyOn(toast, 'add')
+    // The store outlives tests; start without the previous test's job.
+    useKoharuStore.setState({ describeJobs: {} })
+    render(<Inspector />)
+
+    await user.click(screen.getByTestId('describe-page'))
+    await waitFor(() => expect(useKoharuStore.getState().describeJobs.job).toBeTruthy())
+    const failed = { ...explainedJob(null), state: 'failed' as const, error: 'model offline' }
+    act(() => receiveJob(failed))
+    act(() => receiveJob(failed))
+    // The unmocked bridge may toast other errors in this harness; count only ours.
+    const ours = add.mock.calls.filter(
+      ([options]) => options.title === 'Could not describe the page',
+    )
+    expect(ours).toHaveLength(1)
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        title: 'Could not describe the page',
+        description: 'model offline',
+      }),
+    )
   })
 
   it('sends a one-shot note for that box only and keeps it until the popover closes', async () => {

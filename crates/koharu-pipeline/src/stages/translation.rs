@@ -318,6 +318,68 @@ fn merge_proposals(scene: &Snapshot, mut new: TranslationProposals) -> Result<Op
     Ok((merged != before).then_some(merged))
 }
 
+impl Processor {
+    /// The description request: page image plus Character sheet, sent to the description model
+    /// (its own provider config, usually not translation's). `None` when no model is set or the
+    /// page has no image. Shared by Translate and the Inspector's Describe.
+    async fn describe(
+        &self,
+        input: &StageInput,
+        characters: &[TranslationCharacter],
+    ) -> Result<Option<Translated>> {
+        let Some(model) = self.config.description_model.as_ref() else {
+            return Ok(None);
+        };
+        let Some(image) = input.images.get(&input.scene, input.page, "source").await? else {
+            return Ok(None);
+        };
+        let request = TranslationRequest::describing(self.config.target_language)
+            .with_characters(characters.to_vec())
+            .with_image(image);
+        self.translator
+            .describe(model, self.config.generation, request)
+            .await
+            .map(Some)
+    }
+
+    /// Describe only: writes the page's description and the appearance proposals, nothing else.
+    /// Unlike a Translate run, a failure is returned so the user sees it.
+    async fn describe_only(&self, input: StageInput) -> Result<koharu_scene::Patch> {
+        let model = self
+            .config
+            .description_model
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("no description model is set"))?;
+        anyhow::ensure!(
+            input.scene.component::<Locked>(input.page)?.is_none(),
+            "the description is locked"
+        );
+        let found = self
+            .describe(&input, &character_sheet(&input.scene)?)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("the page has no image to describe"))?;
+        let text = found
+            .description
+            .ok_or_else(|| anyhow::anyhow!("the model returned no description"))?;
+        // The description model's provider stamps the edit, since it is not the translation's.
+        let generated = generation(PRODUCER, model.provider.into())?;
+        let mut edit = input.scene.edit_as(generated.clone());
+        // An explicit request replaces an unlocked description, hand-written or not.
+        edit.replace_user_edits();
+        edit.set(
+            input.page,
+            &SceneDescription {
+                text,
+                origin: Origin::Generated(generated),
+            },
+        )?;
+        if let Some(merged) = merge_proposals(&input.scene, found.proposals)? {
+            edit.set_project(&merged)?;
+        }
+        finish(edit)
+    }
+}
+
 #[async_trait]
 impl StageProcessor for Processor {
     fn model(&self) -> &'static str {
@@ -335,6 +397,9 @@ impl StageProcessor for Processor {
     /// A page whose boxes are all locked has nothing to translate; it still runs when the
     /// description will be redone.
     fn skip(&self, input: &StageInput) -> Result<bool> {
+        if input.describe_only {
+            return Ok(false);
+        }
         let describes = self.config.description_model.is_some()
             && should_describe(
                 true,
@@ -345,6 +410,9 @@ impl StageProcessor for Processor {
     }
 
     async fn process(&self, input: StageInput) -> Result<koharu_scene::Patch> {
+        if input.describe_only {
+            return self.describe_only(input).await;
+        }
         let (targets, locked) = translatable_boxes(&input)?;
         // Entity scope translates only the chosen segments; the page's other segments go to the
         // model as context so a single box reads like it does in a full run. Locked boxes are
@@ -393,30 +461,18 @@ impl StageProcessor for Processor {
         let mut description = existing.as_ref().map(|d| d.text.clone());
         let mut described = None;
         let mut appearances = Vec::new();
-        if let Some(model) = self
-            .config
-            .description_model
-            .as_ref()
-            .filter(|_| should_describe(true, input.entities.is_some(), description_locked))
-            && let Some(image) = input.images.get(&input.scene, input.page, "source").await?
-        {
-            let request = TranslationRequest::describing(self.config.target_language)
-                .with_characters(characters.clone())
-                .with_image(image);
+        if should_describe(true, input.entities.is_some(), description_locked) {
             // ponytail: a failed description only costs context, so translation goes on without
-            // it; surface the failure in the UI if silent skips confuse people.
-            match self
-                .translator
-                .describe(model, self.config.generation, request)
-                .await
-            {
-                Ok(found) => {
+            // it; the Inspector's Describe button is where the failure is shown.
+            match self.describe(&input, &characters).await {
+                Ok(Some(found)) => {
                     appearances = found.proposals.characters;
                     if let Some(text) = found.description {
                         description = Some(text.clone());
                         described = Some(text);
                     }
                 }
+                Ok(None) => {}
                 Err(error) => tracing::warn!(%error, "scene description failed"),
             }
         }

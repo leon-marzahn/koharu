@@ -39,6 +39,7 @@ pub(crate) struct Execution<'a> {
     force_inpainting: bool,
     /// Set for a one-box translation; holds its note.
     translate_box: Option<Option<String>>,
+    describe_only: bool,
 }
 
 /// "Inpaint" on its own is a retry: redo pages that already have a cleanup layer.
@@ -66,6 +67,7 @@ impl<'a> Execution<'a> {
             Operation::TranslateBox { note } => Some(note.clone()),
             _ => None,
         };
+        let describe_only = request.operation == Operation::DescribePage;
         let stages = request
             .operation
             .stages()
@@ -108,6 +110,7 @@ impl<'a> Execution<'a> {
             inpainting_mask: request.inpainting_mask,
             force_inpainting,
             translate_box,
+            describe_only,
         })
     }
 
@@ -168,6 +171,9 @@ impl<'a> Execution<'a> {
                 note: note.clone(),
                 progress: self.progress.clone(),
             });
+        }
+        if self.describe_only {
+            input = input.with_describe_only();
         }
         Some(StageJob::new(
             stage,

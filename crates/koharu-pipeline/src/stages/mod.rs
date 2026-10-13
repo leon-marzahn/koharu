@@ -23,6 +23,8 @@ pub(crate) struct StageInput {
     images: Arc<ImageCache>,
     inpainting_mask: Option<InpaintingMask>,
     explain: Option<Explain>,
+    /// Run only the description block of the translation stage.
+    describe_only: bool,
 }
 
 /// A one-box translation: the user's note, and where the model's explanation goes.
@@ -35,6 +37,11 @@ pub(crate) struct Explain {
 impl StageInput {
     pub(crate) fn with_explain(mut self, explain: Explain) -> Self {
         self.explain = Some(explain);
+        self
+    }
+
+    pub(crate) fn with_describe_only(mut self) -> Self {
+        self.describe_only = true;
         self
     }
 
@@ -54,6 +61,7 @@ impl StageInput {
             images,
             inpainting_mask,
             explain: None,
+            describe_only: false,
         }
     }
 

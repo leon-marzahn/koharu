@@ -412,7 +412,12 @@ export type OpenRouterConfig = Record<string, never>;
 
 export type Operation = { operation: "full" } | { operation: "through"; stage: Stage } | { operation: "only"; stage: Stage } | 
 /**  Translate the scoped boxes and explain the result; `note` steers this request only. */
-{ operation: "translate_box"; note: string | null } | { operation: "stages"; stages: Stage[] };
+{ operation: "translate_box"; note: string | null } | 
+/**
+ *  Ask the description model for the scoped pages' Scene Description and appearance
+ *  proposals, and nothing else: no translation, no stale marker.
+ */
+{ operation: "describe_page" } | { operation: "stages"; stages: Stage[] };
 
 export type Page = {
 	id: EntityId,
