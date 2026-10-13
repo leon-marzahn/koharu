@@ -6,7 +6,7 @@
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `cargo check -p koharu-translator --bin translate` passes
-- [ ] No new dependency
+- [x] `cargo check -p koharu-translator --bin translate` passes
+- [x] No new dependency
