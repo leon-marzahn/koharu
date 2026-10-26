@@ -62,6 +62,17 @@ fn translatable_boxes(input: &StageInput) -> Result<(Vec<(EntityId, String)>, Ve
     Ok((targets, locked))
 }
 
+/// Every text box's source on the page, locked or not, in layer order.
+fn page_text(scene: &Snapshot, page: EntityId) -> Result<Vec<String>> {
+    let mut lines = Vec::new();
+    if let Some(group) = scene.page(page)?.text_group()? {
+        for layer in group.text_layers()? {
+            lines.extend(layer.content()?.source()?.map(|source| source.text.value));
+        }
+    }
+    Ok(lines)
+}
+
 /// What `pick` finds on the last `limit` pages before `page` that have anything, in reading
 /// order. `pick` gets the page's 1-based number; pages it returns `None` for use no window.
 fn previous_pages<T>(
@@ -194,6 +205,22 @@ fn known_sources(scene: &Snapshot) -> Result<Vec<String>> {
         .chain(proposals.characters.into_iter().map(|c| c.source_name))
         .chain(proposals.terms.into_iter().map(|t| t.source))
         .collect())
+}
+
+/// One Translate run's proposals: the description call's ride with the translation call's so one
+/// character is one entry. New characters list the translation's first, since it names them and
+/// `merge_proposals` keeps the first sighting's fields. Updates list the description's first, so
+/// the translation's wins a field both set.
+fn with_described(
+    mut translated: TranslationProposals,
+    mut described: TranslationProposals,
+) -> TranslationProposals {
+    translated.characters.append(&mut described.characters);
+    described
+        .character_updates
+        .append(&mut translated.character_updates);
+    translated.character_updates = described.character_updates;
+    translated
 }
 
 /// Adds returned proposals as pending entries. A "new" entry whose source is already approved
@@ -389,9 +416,11 @@ async fn clean_page(input: &StageInput) -> Result<Option<Arc<DynamicImage>>> {
 }
 
 impl Processor {
-    /// The description request: page image plus Character sheet, sent to the description model
-    /// (its own provider config, usually not translation's). `None` when no model is set or the
-    /// page has no image. Shared by Translate and the Inspector's Describe.
+    /// The description request: page image, its OCR text and the Character sheet, sent to the
+    /// description model (its own provider config, usually not translation's). `None` when no
+    /// model is set or the page has no image. Shared by Translate and the Inspector's Describe.
+    /// The text rides along because the image may already be cleaned, and analysis-only
+    /// projects get their character proposals from this call alone.
     async fn describe(
         &self,
         input: &StageInput,
@@ -410,6 +439,8 @@ impl Processor {
                 input.page,
                 self.config.description_previous_pages,
             )?)
+            .with_page_text(page_text(&input.scene, input.page)?)
+            .with_known_sources(known_sources(&input.scene)?)
             .with_image(image);
         if let Some(instructions) = self.config.description_instructions.as_deref() {
             request = request.with_instructions(instructions);
@@ -433,7 +464,7 @@ impl Processor {
         described.map(Some)
     }
 
-    /// Describe only: writes the page's description and the appearance proposals, nothing else.
+    /// Describe only: writes the page's description and the character proposals, nothing else.
     /// Unlike a Translate run, a failure is returned so the user sees it.
     async fn describe_only(&self, input: StageInput) -> Result<koharu_scene::Patch> {
         let model = self
@@ -551,13 +582,13 @@ impl StageProcessor for Processor {
         let description_locked = input.scene.component::<Locked>(input.page)?.is_some();
         let mut description = existing.as_ref().map(|d| d.text.clone());
         let mut described = None;
-        let mut appearances = Vec::new();
+        let mut seen = TranslationProposals::default();
         if should_describe(true, input.entities.is_some(), description_locked) {
             // ponytail: a failed description only costs context, so translation goes on without
             // it; the Inspector's Describe button is where the failure is shown.
             match self.describe(&input, &characters).await {
                 Ok(Some(found)) => {
-                    appearances = found.proposals.characters;
+                    seen = found.proposals;
                     if let Some(text) = found.description {
                         description = Some(text.clone());
                         described = Some(text);
@@ -638,9 +669,8 @@ impl StageProcessor for Processor {
         }
         // ponytail: replaces the whole component from this page's snapshot, so a review made while
         // pages translate concurrently can be overwritten; add project-level observation if it bites.
-        // Appearance proposals ride with the translation call's so one new character is one entry.
-        translated.proposals.characters.extend(appearances);
-        if let Some(merged) = merge_proposals(&input.scene, translated.proposals)? {
+        let proposals = with_described(translated.proposals, seen);
+        if let Some(merged) = merge_proposals(&input.scene, proposals)? {
             edit.set_project(&merged)?;
         }
         write_translations(
@@ -1358,6 +1388,70 @@ mod tests {
             ..Default::default()
         };
         assert!(merge_proposals(&scene, noop).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn description_proposals_carry_every_field_and_merge_with_translation() {
+        let mut known = character("a");
+        known.appearance = "two piercings".into();
+        let scene = scene_with(vec![known], vec![], Proposals::default()).await;
+        let described = TranslationProposals {
+            characters: vec![TranslationCharacter {
+                source_name: "ヒナ".into(),
+                target_name: "Other".into(),
+                speech_style: "ends with -nano".into(),
+                notes: "Mito's sister".into(),
+                ..Default::default()
+            }],
+            character_updates: vec![TranslationCharacterUpdate {
+                source_name: "a".into(),
+                speech_style: Some("described".into()),
+                appearance: Some("three piercings".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // Describe only (and analysis-only): the description call alone stores speech style and
+        // notes for a new character, and an appearance update for a known one.
+        let merged = merge_proposals(&scene, described.clone()).unwrap().unwrap();
+        assert_eq!(merged.characters[0].speech_style, "ends with -nano");
+        assert_eq!(merged.characters[0].notes, "Mito's sister");
+        assert_eq!(
+            merged.character_updates[0].appearance.as_deref(),
+            Some("three piercings")
+        );
+
+        // Translate: the translation call names the new character, the description fills what
+        // it left empty, and the translation wins an update field both set.
+        let translated = TranslationProposals {
+            characters: vec![TranslationCharacter {
+                source_name: "ヒナ".into(),
+                target_name: "Hina".into(),
+                ..Default::default()
+            }],
+            character_updates: vec![TranslationCharacterUpdate {
+                source_name: "a".into(),
+                speech_style: Some("translated".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let merged = merge_proposals(&scene, with_described(translated, described))
+            .unwrap()
+            .unwrap();
+        assert_eq!(merged.characters.len(), 1);
+        assert_eq!(merged.characters[0].target_name, "Hina");
+        assert_eq!(merged.characters[0].speech_style, "ends with -nano");
+        assert_eq!(merged.character_updates.len(), 1);
+        assert_eq!(
+            merged.character_updates[0].speech_style.as_deref(),
+            Some("translated")
+        );
+        assert_eq!(
+            merged.character_updates[0].appearance.as_deref(),
+            Some("three piercings")
+        );
     }
 
     #[tokio::test]

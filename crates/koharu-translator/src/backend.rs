@@ -35,6 +35,9 @@ pub struct TranslationRequest {
     pub describe: bool,
     /// Descriptions of earlier pages, oldest first, sent with a description request only.
     pub previous_descriptions: Vec<PreviousDescription>,
+    /// The page's OCR text, one line per box, sent with a description request only so it can
+    /// propose characters even when the attached image has its text cleaned away.
+    pub page_text: Vec<String>,
 }
 
 /// An earlier page's Scene Description, sent so the next page is described with continuity.
@@ -60,6 +63,15 @@ impl TranslationRequest {
         descriptions: impl IntoIterator<Item = PreviousDescription>,
     ) -> Self {
         self.previous_descriptions = descriptions.into_iter().collect();
+        self
+    }
+
+    #[must_use]
+    pub fn with_page_text(mut self, lines: impl IntoIterator<Item = String>) -> Self {
+        self.page_text = lines
+            .into_iter()
+            .filter(|line| !line.trim().is_empty())
+            .collect();
         self
     }
 
@@ -90,6 +102,7 @@ impl TranslationRequest {
             scene_description: None,
             describe: false,
             previous_descriptions: Vec::new(),
+            page_text: Vec::new(),
         }
     }
 

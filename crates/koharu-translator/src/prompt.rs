@@ -16,6 +16,12 @@ pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, S
         if !request.previous_descriptions.is_empty() {
             input["previous_pages"] = json!(request.previous_descriptions);
         }
+        if !request.page_text.is_empty() {
+            input["page_text"] = json!(request.page_text);
+        }
+        if !request.known_sources.is_empty() {
+            input["known_sources"] = json!(request.known_sources);
+        }
         let user =
             serde_json::to_string(&input).context("failed to serialize description input")?;
         return Ok((description_system_prompt(request), user));
@@ -96,8 +102,12 @@ fn description(provider: &str, text: &str) -> anyhow::Result<Translated> {
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(str::to_owned);
-    // Characters the model could not match to the sheet; read like translation proposals.
-    let proposals = proposals(&json!({ "characters": value.get("characters") }));
+    // New and known characters, read like the translation call's proposals; the describe call
+    // proposes no terms.
+    let proposals = proposals(&json!({
+        "characters": value.get("characters"),
+        "character_updates": value.get("character_updates"),
+    }));
     Ok(Translated {
         description,
         proposals,
@@ -192,21 +202,10 @@ pub(crate) fn request_schema(request: &TranslationRequest) -> Value {
                     "type": "string",
                     "description": "Who is present, what is happening, and the mood of the page."
                 },
-                "characters": {
-                    "type": "array",
-                    "description": "Characters on the page that match nobody on the character sheet.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "source_name": { "type": "string" },
-                            "appearance": { "type": "string" }
-                        },
-                        "required": ["source_name", "appearance"],
-                        "additionalProperties": false
-                    }
-                }
+                "characters": new_characters_schema(),
+                "character_updates": character_updates_schema()
             },
-            "required": ["description", "characters"],
+            "required": ["description", "characters", "character_updates"],
             "additionalProperties": false
         });
     }
@@ -253,21 +252,7 @@ pub(crate) fn output_schema(expected: usize) -> Value {
                 "type": "object",
                 "description": "New recurring characters and terms worth adding to the project. Use empty arrays when there are none.",
                 "properties": {
-                    "characters": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "source_name": { "type": "string" },
-                                "target_name": { "type": "string" },
-                                "speech_style": { "type": "string" },
-                                "appearance": { "type": "string" },
-                                "notes": { "type": "string" }
-                            },
-                            "required": ["source_name", "target_name", "speech_style", "appearance", "notes"],
-                            "additionalProperties": false
-                        }
-                    },
+                    "characters": new_characters_schema(),
                     "terms": {
                         "type": "array",
                         "items": {
@@ -281,23 +266,7 @@ pub(crate) fn output_schema(expected: usize) -> Value {
                             "additionalProperties": false
                         }
                     },
-                    // Strict structured outputs need every property required, so "unchanged"
-                    // is an explicit null rather than an absent field.
-                    "character_updates": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "source_name": { "type": "string" },
-                                "target_name": { "type": ["string", "null"] },
-                                "speech_style": { "type": ["string", "null"] },
-                                "appearance": { "type": ["string", "null"] },
-                                "notes": { "type": ["string", "null"] }
-                            },
-                            "required": ["source_name", "target_name", "speech_style", "appearance", "notes"],
-                            "additionalProperties": false
-                        }
-                    },
+                    "character_updates": character_updates_schema(),
                     "term_updates": {
                         "type": "array",
                         "items": {
@@ -321,27 +290,85 @@ pub(crate) fn output_schema(expected: usize) -> Value {
     })
 }
 
+/// New characters, shared by the translation and description replies.
+fn new_characters_schema() -> Value {
+    json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "source_name": { "type": "string" },
+                "target_name": { "type": "string" },
+                "speech_style": { "type": "string" },
+                "appearance": { "type": "string" },
+                "notes": { "type": "string" }
+            },
+            "required": ["source_name", "target_name", "speech_style", "appearance", "notes"],
+            "additionalProperties": false
+        }
+    })
+}
+
+/// Updates to known characters, shared by the translation and description replies. Strict
+/// structured outputs need every property required, so "unchanged" is an explicit null rather
+/// than an absent field.
+fn character_updates_schema() -> Value {
+    json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "source_name": { "type": "string" },
+                "target_name": { "type": ["string", "null"] },
+                "speech_style": { "type": ["string", "null"] },
+                "appearance": { "type": ["string", "null"] },
+                "notes": { "type": ["string", "null"] }
+            },
+            "required": ["source_name", "target_name", "speech_style", "appearance", "notes"],
+            "additionalProperties": false
+        }
+    })
+}
+
+/// What each character field holds and how an update rewrites it; both calls propose characters.
+/// Approving an update replaces the field, so a partial value would erase what it leaves out.
+const CHARACTER_FIELDS: &str = indoc! {"
+    Character fields:
+    - `speech_style`: how they talk: register, politeness, verbal tics, sentence endings, and how they refer to themselves and others.
+    - `appearance`: lasting traits first (face, hair, build, marks, accessories always worn), then their current outfit. A new outfit replaces the current outfit, not the lasting traits.
+    - `notes`: everything else noteworthy: role, personality, relationships and how they address each other, habits, recurring items, and facts revealed so far.
+    An update replaces the field when approved, so write the full revised text: keep what still holds, add what is new, and correct what was wrong (for example three piercings, not two). Set a field to null to leave it unchanged, and never restate the current value.
+    Propose an update only for something the page actually shows or says, never from a guess, a partial view, or lighting.
+"};
+
 fn description_system_prompt(request: &TranslationRequest) -> String {
     let mut prompt = format!(
         indoc! {"
-            You describe one manga page so a translator knows the scene.
+            You describe one manga page so a translator knows the scene, and keep the project's character sheet up to date.
 
             Requirements:
-            - Look at the attached page image.
+            - Look at the attached page image. `page_text`, when present, holds the page's text boxes in reading order.
             - Say who is present, what is happening, and the mood. Note who seems to be speaking to whom.
-            - Write the description only in {target}, in a few plain sentences. Describe what is shown; do not translate or transcribe the dialogue. Ignore all text, speech bubbles and sound effects; describe only who is there, where, what they are doing and their expressions.
-            - List in `characters` each person who matches nobody on the character sheet: `source_name` as the page names them, and their `appearance`. Skip people the page does not name. Use an empty array when everyone is matched or unnamed.
-            - Return only a JSON object with a `description` string and a `characters` array.
+            - Write the description only in {target}, in a few plain sentences. Describe what is shown; do not translate or transcribe the dialogue. Leave text, speech bubbles and sound effects out of the description; describe only who is there, where, what they are doing and their expressions.
+            - Return only a JSON object with a `description` string, a `characters` array and a `character_updates` array.
+
+            Character proposal requirements:
+            - Use the image and the text to learn about the people on the page.
+            - List in `characters` each named person who is not on the character sheet: `source_name` exactly as the text writes it, `target_name` in {target}, and every other field the page lets you fill. Skip people the page does not name. Never propose a source listed in `known_sources`; those are pending or rejected.
+            - List in `character_updates` each character on the sheet whose entry this page adds to or contradicts. `source_name` must match the entry exactly.
+            - Use empty arrays when there is nothing to propose.
         "},
         target = request.target_language,
     )
     .trim_end()
     .to_owned();
+    prompt.push_str("\n\n");
+    prompt.push_str(CHARACTER_FIELDS.trim_end());
     if !request.characters.is_empty() {
         prompt.push_str("\n\n");
         prompt.push_str(indoc! {"
             Character sheet requirements:
-            The `characters` array lists the project's recurring characters with their `appearance` and `notes`.
+            The `characters` array lists the project's recurring characters with their `speech_style`, `appearance` and `notes`.
             Compare everyone on the page with those entries. When someone matches a character, call them by that character's `target_name` (for example 'Adachi') and do not describe their looks; the translator already knows them. Describe by looks only people who match nobody.
         "}.trim_end());
     }
@@ -450,6 +477,8 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         Propose an update only for a clearly new fact about an existing entry, such as a newly noticed speech quirk or a name correction; never restate current values.
         Use empty arrays when there is nothing to propose. Proposals never replace the translations.
     "}.trim_end());
+    prompt.push_str("\n\n");
+    prompt.push_str(CHARACTER_FIELDS.trim_end());
 
     if request.scene_description.is_some() {
         prompt.push_str("\n\n");
@@ -767,7 +796,35 @@ mod tests {
         assert!(system.contains("`target_name`") && system.contains("do not describe their looks"));
         assert!(system.contains("Skip people the page does not name"));
         let schema = request_schema(&request);
-        assert_eq!(schema["required"], json!(["description", "characters"]));
+        assert_eq!(
+            schema["required"],
+            json!(["description", "characters", "character_updates"])
+        );
+        // The same character shapes as the translation reply's proposals.
+        let translation = &output_schema(1)["properties"]["proposals"]["properties"];
+        assert_eq!(
+            schema["properties"]["characters"],
+            translation["characters"]
+        );
+        assert_eq!(
+            schema["properties"]["character_updates"],
+            translation["character_updates"]
+        );
+        // Both calls are told what each field holds and that an update is the full revised text.
+        let (translate_system, _) =
+            prompts(&TranslationRequest::new(["x"], Language::English)).unwrap();
+        for prompt in [&system, &translate_system] {
+            assert!(prompt.contains(CHARACTER_FIELDS.trim_end()));
+        }
+        // Absent page text and known sources are left out of the input.
+        assert!(input.get("page_text").is_none() && input.get("known_sources").is_none());
+        let request = request
+            .with_page_text(["ヒナ、行くよ".to_owned(), "  ".to_owned()])
+            .with_known_sources(["ミト".to_owned()]);
+        let (_, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+        assert_eq!(input["page_text"], json!(["ヒナ、行くよ"]));
+        assert_eq!(input["known_sources"], json!(["ミト"]));
 
         let described = translations("test", r#"{"description":" Two friends. "}"#, &[]).unwrap();
         assert_eq!(described.description.as_deref(), Some("Two friends."));
@@ -793,6 +850,26 @@ mod tests {
             .map(|c| (c.source_name.as_str(), c.appearance.as_str()))
             .collect();
         assert_eq!(found, [("ヒナ", "red scarf"), ("ミト", "")]);
+
+        // New characters keep every field; updates keep only the fields that are set.
+        let fenced = translations(
+            "test",
+            "```json\n{\"description\":\"x\",\"characters\":[{\"source_name\":\"ヒナ\",\"target_name\":\"Hina\",\"speech_style\":\"ends with -nano\",\"appearance\":\"red scarf\",\"notes\":\"Mito's sister\"}],\"character_updates\":[{\"source_name\":\"ミト\",\"target_name\":null,\"speech_style\":null,\"appearance\":\"three piercings\",\"notes\":null},{\"source_name\":\" \"}]}\n```",
+            &[],
+        )
+        .unwrap();
+        let proposals = fenced.proposals;
+        assert_eq!(proposals.characters[0].speech_style, "ends with -nano");
+        assert_eq!(proposals.characters[0].notes, "Mito's sister");
+        assert_eq!(
+            proposals.character_updates,
+            [TranslationCharacterUpdate {
+                source_name: "ミト".into(),
+                appearance: Some("three piercings".into()),
+                ..Default::default()
+            }]
+        );
+        assert!(proposals.terms.is_empty() && proposals.term_updates.is_empty());
     }
 
     #[test]
